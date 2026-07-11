@@ -1,0 +1,2125 @@
+<meta charset="UTF-8">
+<div id="zus-scheduler"></div>
+<style>
+#zus-scheduler {
+  --navy: #1b3a6b;
+  --navy-dark: #0f2748;
+  --cream: #fbf7ee;
+  --gold: #d6ad55;
+  --gold-soft: #d6ad55;
+  --ink: #1c2430;
+  --ink-soft: #5b6573;
+  --line: #dfe3ea;
+  --green: #1f8a52;
+  --green-bg: #e8f5ee;
+  --amber: #b97a14;
+  --amber-bg: #fbf0dc;
+  --red: #c23b3b;
+  --red-bg: #fbe9e9;
+  --blue-bg: #dce7f7;
+  --night-blue: #151B54;
+  --steel-blue: #4682B4;
+  --deep-sea-blue: #123456;
+  font-family: 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--cream);
+  border-radius: 14px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+#zus-scheduler * { box-sizing: border-box; }
+
+.zs-header { background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%); color: white; padding: 22px 26px 18px; }
+.zs-header .eyebrow { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 4px; }
+.zs-header .eyebrow-select { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 4px; background: transparent; border: none; border-bottom: 1px dashed rgba(243,210,122,0.55); padding: 0 16px 2px 0; font-family: inherit; cursor: pointer; -webkit-appearance: none; appearance: none; }
+.zs-header .eyebrow-select:focus { outline: none; border-bottom-color: var(--gold); }
+.zs-header .eyebrow-select option { color: var(--ink); background: white; text-transform: none; letter-spacing: normal; font-weight: 600; }
+.zs-header-top { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.zs-header .eyebrow-sep { color: rgba(243,210,122,0.55); font-size:14px; line-height:1; user-select:none; }
+.zs-header h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -0.01em; text-transform: uppercase; }
+.zs-header p { margin: 6px 0 0; font-size: 12.5px; color: #c9d6ea; max-width: 720px; line-height: 1.5; }
+
+.zs-tabs { display: flex; gap: 2px; background: var(--navy-dark); padding: 0 20px; }
+.zs-tab { padding: 10px 16px; font-size: 12.5px; font-weight: 600; color: #b9c6dd; cursor: pointer; border-bottom: 3px solid transparent; user-select: none; }
+.zs-tab.active { color: white; border-bottom-color: var(--gold); }
+
+.zs-cal-controls { display:flex; gap:14px; align-items:center; background: var(--gold-soft); padding: 10px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.zs-cal-controls label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: var(--navy-dark); margin-right: 6px; }
+.zs-cal-controls select { font-size: 12.5px; font-weight: 700; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); font-family: inherit; background: white; color: var(--ink); }
+.zs-cal-range { font-size: 11.5px; color: var(--navy-dark); font-weight: 600; margin-left: auto; }
+
+.zs-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
+.zs-kpi { background: white; padding: 12px 16px; }
+.zs-kpi .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); font-weight: 600; margin-bottom: 4px; }
+.zs-kpi .value { font-size: 17px; font-weight: 700; line-height: 1.1; }
+.zs-kpi .sub { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
+.zs-kpi input { width: 100%; font-size: 15px; font-weight: 700; border: none; background: transparent; padding: 0; font-family: inherit; color: var(--ink); border-bottom: 1.5px dashed var(--line); }
+.zs-kpi input:focus { outline: none; border-bottom-color: var(--navy); }
+.zs-kpi-row { display: flex; gap: 10px; align-items: baseline; }
+.zs-kpi-row .mini { font-size: 10.5px; color: var(--ink-soft); }
+
+.zs-pill { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+.pill-green { background: var(--green-bg); color: var(--green); }
+.pill-amber { background: var(--amber-bg); color: var(--amber); }
+.pill-red { background: var(--red-bg); color: var(--red); }
+
+.zs-body { padding: 18px 20px 22px; }
+.zs-section-title { font-size: 13px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px; }
+
+.zs-roster-wrap, .zs-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: white; }
+table.zs-roster, table.zs-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.zs-roster { min-width: 1050px; }
+table.zs-table { min-width: 1080px; table-layout: fixed; }
+table.zs-roster th, table.zs-roster td, table.zs-table th, table.zs-table td { padding: 6px 7px; border: 1px solid var(--line); text-align: center; vertical-align: middle; }
+table.zs-roster thead th { background: var(--navy); color: white; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 7px; }
+table.zs-roster td.name-cell { text-align: left; }
+table.zs-roster input[type=text], table.zs-roster input[type=number] { width: 100%; border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; font-family: inherit; font-size: 12px; }
+table.zs-roster select { width: 100%; border: 1px solid var(--line); border-radius: 5px; padding: 4px 4px; font-family: inherit; font-size: 12px; }
+table.zs-roster input[type=checkbox] { width: 16px; height: 16px; }
+.zs-mini-btn { background: var(--navy); color: white; border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.zs-mini-btn:hover { background: var(--navy-dark); }
+.zs-mini-btn.danger { background: var(--red); }
+.zs-mini-btn.danger:hover { background: #9c2e2e; }
+.zs-mini-btn.ghost { background: transparent; color: var(--navy); border: 1px solid var(--navy); }
+
+table.zs-table thead tr.zs-days th { background: var(--gold-soft); font-weight: 700; font-size: 10.5px; color: var(--navy-dark); white-space: nowrap; vertical-align: top; padding-top: 10px; padding-bottom: 10px; }
+table.zs-table thead tr.zs-days th .ph-tag { display:block; font-size: 8.5px; font-weight: 800; color: var(--red); text-transform: none; letter-spacing: 0.03em; margin: 6px auto 0; max-width: 96px; white-space: normal; line-height: 1.3; }
+table.zs-table thead tr.zs-days th .zus-day-tag { display:block; width: fit-content; margin: 3px auto 0; font-size: 8.5px; font-weight: 800; color: var(--navy); background: white; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 99px; }
+table.zs-table thead tr.zs-days th .op-tag, table.zs-readonly thead tr.zs-days th .op-tag { display:block; width: fit-content; max-width: 100%; margin: 3px auto 0; font-size: 8.5px; font-weight: 700; color: white; background: var(--navy); text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 99px; white-space: normal; line-height: 1.3; box-sizing: border-box; }
+.zs-cell .borrowed-rate-tag { display:block; width:fit-content; margin: 0 auto 3px; font-size: 8px; font-weight: 800; color: white; background: var(--amber); text-transform: uppercase; letter-spacing: 0.02em; padding: 1px 6px; border-radius: 99px; }
+tr.zs-notes-row th { background: var(--cream); font-weight: 400; padding: 6px 5px; }
+tr.zs-notes-row th.zs-name-col { font-size: 10.5px; font-weight: 700; color: var(--navy-dark); text-transform: uppercase; letter-spacing: 0.05em; }
+.custom-note-input { display:block; width: 100%; font-size: 10.5px; font-weight: 400; text-align: center; text-transform: none; letter-spacing: 0; border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font-family: inherit; background: white; color: var(--ink); box-sizing: border-box; }
+.custom-note-input::placeholder { color: #b7bcc4; }
+.note-readonly { display:block; font-size: 10.5px; color: var(--ink); font-style: italic; padding: 4px 2px; }
+table.zs-table th.zs-name-col, table.zs-table td.zs-name-col { text-align: left; min-width: 150px; }
+table.zs-table td.zs-name-col select { width: 100%; font-size: 12px; font-weight: 600; border: 1px solid var(--line); border-radius: 5px; padding: 4px; font-family: inherit; }
+table.zs-table td.zs-name-col .role-tag { display: block; font-weight: 400; font-size: 10px; color: var(--ink-soft); margin-top: 2px; }
+table.zs-table tbody tr.zs-data-row:nth-child(even) { background: #fbfbfa; }
+table.zs-table tbody tr.zs-section-break td { background: var(--navy-dark); color: white; font-weight: 700; text-align: left; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 10px; }
+
+.zs-cell { display: flex; flex-direction: column; gap: 3px; align-items: center; min-width: 104px; background: var(--blue-bg); border-radius: 7px; padding: 5px; }
+.zs-cell.off { background: #f1f1ef; }
+.zs-cell.off-paid { background: var(--night-blue); }
+.zs-cell.offr { background: #e3dbf5; }
+.zs-cell.al { background: #cdeee6; color: #0a5c43; font-weight:600; }
+.zs-cell.off-paid { background: #f1f1ef; }
+.zs-cell.cover-out { background: var(--steel-blue); color: white; }
+.zs-cell.cover-in { background: var(--deep-sea-blue); color: white; }
+.zs-cell.al-paid { background: #cdeee6; color: #0a5c43; font-weight:600; }
+.zs-cell.bl { background: #008080; color: white; font-weight:600; }
+.zs-cell.mc { background: var(--red); color: white; font-weight:600; }
+.zs-cell.bl select.shift-type, .zs-cell.mc select.shift-type { background: rgba(255,255,255,0.15); color: white; border-color: rgba(255,255,255,0.3); }
+.zs-cell.invalid { background: #f7f7f5; color: #bbb; min-width: 40px; }
+.zs-cell select.shift-type { width: 100%; font-size: 11px; border: 1px solid var(--line); border-radius: 5px; padding: 2px 3px; font-family: inherit; background: white; }
+.zs-cell.off select.shift-type, .zs-cell.offr select.shift-type, .zs-cell.al select.shift-type { background: #f7f7f5; color: var(--ink-soft); }
+.zs-cell select.mid-start { width: 100%; font-size: 10px; border: 1px solid var(--line); border-radius: 5px; padding: 2px 2px; font-family: inherit; }
+.zs-cell .time-pick { display:flex; align-items:center; gap:2px; width:100%; }
+.zs-cell .time-pick select { font-size: 9.5px; border: 1px solid var(--line); border-radius: 5px; padding: 1px 1px; font-family: inherit; }
+.zs-cell .time-pick select.tp-hh { width: 60%; }
+.zs-cell .time-pick select.tp-mm { width: 38%; }
+.zs-cell .tp-colon { font-size: 10px; color: var(--ink-soft); }
+.zs-cell select.cover-dir, .zs-cell input.cover-note { width: 100%; font-size: 10px; border: 1px solid var(--line); border-radius: 5px; padding: 2px 2px; font-family: inherit; }
+.zs-cell .time-label { font-size: 9.5px; color: var(--ink-soft); text-align: center; }
+.zs-row-total { font-weight: 700; white-space: nowrap; font-size: 11.5px; }
+.zs-row-total .gross-note { display:block; font-weight: 400; font-size: 9.5px; color: var(--ink-soft); margin-top:2px; }
+
+.hr-badges { display:flex; gap:4px; flex-wrap:wrap; justify-content:center; }
+.hr-badge { font-size: 9px; background:#eef0f3; color: var(--ink-soft); padding: 1px 6px; border-radius: 99px; font-weight: 700; }
+.hr-badge.paid { background: var(--green-bg); color: var(--green); }
+.hr-badge.unmet { background: var(--red-bg); color: var(--red); font-weight: 800; }
+
+.zs-ot-col { min-width: 76px; text-align: center; }
+table.zs-table td.zs-ot-col, table.zs-table th.zs-ot-col { border-right: none !important; }
+table.zs-table td.zs-remove-col, table.zs-table th.zs-remove-col { border-left: none !important; padding-left: 2px; }
+.zs-ot-badge { display:inline-block; font-size: 11px; font-weight: 800; background: var(--amber-bg); color: var(--amber); padding: 3px 9px; border-radius: 99px; }
+.zs-ot-badge.zero { background: #eef0f3; color: var(--ink-soft); font-weight: 600; }
+.zs-ot-cost { display:block; font-size: 9.5px; color: var(--ink-soft); margin-top: 3px; font-weight: 600; }
+
+tfoot td { font-weight: 700; background: var(--gold-soft); border-top: 2px solid var(--navy); font-size: 11px; }
+tfoot tr.headcount td { background: #f3f0e6; font-weight: 600; font-size: 10.5px; color: var(--ink-soft); border-top: 1px solid var(--line); }
+tfoot tr.role-sub td { background: white; font-weight: 600; font-size: 10.5px; color: var(--ink); text-align: left; border-top: 1px solid var(--line); }
+
+.zs-footer-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 16px; }
+.zs-card { background: white; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.zs-card h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--navy); }
+.zs-card ul { margin: 0; padding-left: 18px; font-size: 11.5px; line-height: 1.65; color: var(--ink); }
+.zs-card .warn-list li { color: var(--red); }
+.zs-card .notice-list li { color: var(--amber); }
+.zs-card .ok-msg { color: var(--green); font-size: 12px; font-weight: 600; }
+
+.zs-budget-bar { height: 9px; border-radius: 99px; background: #eef0f3; overflow: hidden; margin: 0; }
+.zs-budget-fill { height: 100%; border-radius: 99px; transition: width .25s ease; }
+
+.zs-actions-row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.zs-note { font-size: 11px; color: var(--ink-soft); margin-top: 10px; line-height: 1.6; }
+.zs-shift-key { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--ink-soft); margin-bottom:12px; }
+.zs-shift-key b { color: var(--ink); }
+
+.zs-history-block { margin-top: 16px; opacity: 0.92; }
+.zs-history-head { display:flex; justify-content:space-between; align-items:center; background: #e7e9ee; color: var(--navy-dark); font-weight: 700; font-size: 11.5px; padding: 8px 12px; border-radius: 8px 8px 0 0; letter-spacing: 0.03em; }
+
+/* ── Month accordion ── */
+.zs-month-group { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.zs-month-header {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--navy-dark); color: white;
+  padding: 12px 16px; cursor: pointer; user-select: none;
+  transition: background 0.18s;
+}
+.zs-month-header:hover { background: #0a1d3e; }
+.zs-month-header-left { display:flex; align-items:center; gap:10px; }
+.zs-month-chevron { font-size:16px; transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); display:inline-block; }
+.zs-month-group.open .zs-month-chevron { transform: rotate(90deg); }
+.zs-month-title { font-size:12.5px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; }
+.zs-month-summary { display:flex; gap:16px; align-items:center; }
+.zs-month-badge { font-size:10px; font-weight:700; background: rgba(243,210,122,0.18); color:var(--gold); border:1px solid rgba(243,210,122,0.3); padding:2px 9px; border-radius:99px; letter-spacing:0.05em; }
+.zs-month-cost { font-size:11.5px; font-weight:700; color: var(--gold); }
+.zs-month-body { display:none; padding: 14px 14px 6px; background: #fafbfc; }
+.zs-month-group.open .zs-month-body { display:block; }
+
+/* week card inside accordion */
+.zs-week-card { background: white; border:1px solid var(--line); border-radius:8px; margin-bottom:10px; overflow:hidden; }
+.zs-week-card-head { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:#f3f5f8; font-size:11px; font-weight:700; color:var(--navy-dark); border-bottom:1px solid var(--line); }
+.zs-week-card-head .wk-right { display:flex; align-items:center; gap:8px; color:var(--ink-soft); font-weight:600; }
+.zs-history-total { font-weight: 700; }
+.zs-history-saved { font-weight: 400; font-size: 9.5px; color: var(--ink-soft); margin-left: 8px; }
+table.zs-readonly { min-width: 900px; table-layout: fixed; }
+table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-soft); }
+.zs-readonly-cell { font-size: 10px; line-height: 1.4; color: var(--ink); background: #f7f8fa; }
+.zs-readonly-cell .ro-off { color: #b7bcc4; font-weight: 400; }
+.zs-readonly-cell .ro-offr { color: #9b86c9; font-weight: 600; }
+
+.zs-footer-credit {
+  background: var(--navy-dark);
+  color: #8a9bc0;
+  font-family: 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-size: 11px;
+  text-align: center;
+  padding: 10px 20px;
+  letter-spacing: 0.04em;
+  border-top: 1px solid #0a1c3a;
+  border-radius: 0 0 14px 14px;
+}
+.zs-footer-credit b { color: var(--gold); }
+</style>
+
+<script>
+(function(){
+  const YEAR = 2026;
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const WEEKDAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  // Public holidays observed by ZUS per state, 2026 — key "M-D" (month-day)
+  const STATE_HOLIDAYS = {
+    PENANG: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day', '5-27':'Hari Raya Haji',
+      '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '7-11':'Birthday of YDP Negeri Pulau Pinang',
+      '8-25':"Prophet Muhammad's Birthday", '8-31':'National Day', '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    PERAK: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day', '5-27':'Hari Raya Haji',
+      '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday", '8-31':'National Day',
+      '9-16':'Malaysia Day', '11-6':'Birthday of Sultan Perak', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    KEDAH: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day', '5-27':'Hari Raya Haji',
+      '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '7-5':'Birthday of Sultan Kedah', '8-25':"Prophet Muhammad's Birthday",
+      '8-31':'National Day', '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    NSEMBILAN: {
+      '1-1':'New Year 2026', '1-14':'Birthday of YDP Besar Negeri Sembilan', '2-1':'Thaipusam', '2-17':'Chinese New Year',
+      '2-18':'Chinese New Year (Day 2)', '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day',
+      '5-27':'Hari Raya Haji', '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday",
+      '8-31':'National Day', '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    MELAKA: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day', '5-27':'Hari Raya Haji',
+      '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '8-24':'Birthday of YDP Negeri Melaka', '8-25':"Prophet Muhammad's Birthday",
+      '8-31':'National Day', '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    SARAWAK: {
+      '1-1':'New Year 2026', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)', '3-21':'Hari Raya Aidilfitri',
+      '3-22':'Hari Raya Aidilfitri (Day 2)', '4-3':'Good Friday', '5-1':'Labour Day', '5-27':'Hari Raya Haji', '5-31':'Wesak Day',
+      '6-1':'Birthday of YDP Agong', '6-2':'Replacement Gawai Dayak Festival', '6-17':'Awal Muharram', '7-22':'Sarawak Independence Day',
+      '8-25':"Prophet Muhammad's Birthday", '8-31':'National Day', '9-16':'Malaysia Day', '10-10':'Birthday of YDP Negeri Sarawak', '12-25':'Christmas',
+    },
+    SABAH: {
+      '1-1':'New Year 2026', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)', '3-21':'Hari Raya Aidilfitri',
+      '3-22':'Hari Raya Aidilfitri (Day 2)', '3-30':'Hari Jadi TYT YDP Negeri', '4-3':'Good Friday', '5-1':'Labour Day',
+      '5-27':'Hari Raya Haji', '5-30':'Harvest Festival', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday",
+      '8-31':'National Day', '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    KLUMPUR: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-2':'Federal Territory Day', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day', '5-27':'Hari Raya Haji',
+      '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday", '8-31':'National Day',
+      '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    JOHOR: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '3-23':'Birthday of Sultan Johor', '5-1':'Labour Day',
+      '5-27':'Hari Raya Haji', '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday",
+      '8-31':'National Day', '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    TERENGGANU: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '4-26':'Birthday of Sultan Terengganu', '5-1':'Labour Day',
+      '5-27':'Hari Raya Haji', '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday",
+      '8-31':'National Day', '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    LABUAN: {
+      '1-1':'New Year 2026', '2-2':'Federal Territory Day', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '4-3':'Good Friday', '5-1':'Labour Day',
+      '5-27':'Hari Raya Haji', '5-30':'Harvest Festival', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday",
+      '8-31':'National Day', '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    KELANTAN: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day', '5-27':'Hari Raya Haji',
+      '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday", '8-31':'National Day',
+      '9-16':'Malaysia Day', '9-29':'Birthday of Sultan Kelantan', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    SELANGOR: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day', '5-27':'Hari Raya Haji',
+      '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday", '8-31':'National Day',
+      '9-16':'Malaysia Day', '11-8':'Deepavali', '12-11':'Birthday of Sultan Selangor', '12-25':'Christmas',
+    },
+    PERLIS: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day', '5-17':'Birthday of Raja Perlis',
+      '5-27':'Hari Raya Haji', '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday",
+      '8-31':'National Day', '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    PUTRAJAYA: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-2':'Federal Territory Day', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day', '5-27':'Hari Raya Haji',
+      '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '8-25':"Prophet Muhammad's Birthday", '8-31':'National Day',
+      '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+    PAHANG: {
+      '1-1':'New Year 2026', '2-1':'Thaipusam', '2-17':'Chinese New Year', '2-18':'Chinese New Year (Day 2)',
+      '3-21':'Hari Raya Aidilfitri', '3-22':'Hari Raya Aidilfitri (Day 2)', '5-1':'Labour Day', '5-27':'Hari Raya Haji',
+      '5-31':'Wesak Day', '6-1':'Birthday of YDP Agong', '7-31':'Birthday of Sultan Pahang', '8-25':"Prophet Muhammad's Birthday",
+      '8-31':'National Day', '9-16':'Malaysia Day', '11-8':'Deepavali', '12-25':'Christmas',
+    },
+  };
+  const STATE_LIST = [
+    { code:'PENANG', label:'P. Pinang' },
+    { code:'KLSELANGOR', label:'KL / Selangor' },
+    { code:'JOHOR', label:'Johor' },
+    { code:'PERAK', label:'Perak' },
+    { code:'KEDAH', label:'Kedah' },
+    { code:'SABAH', label:'Sabah' },
+    { code:'SARAWAK', label:'Sarawak' },
+    { code:'NSEMBILAN', label:'N. Sembilan' },
+    { code:'MELAKA', label:'Melaka' },
+    { code:'PAHANG', label:'Pahang' },
+    { code:'TERENGGANU', label:'Terengganu' },
+    { code:'KELANTAN', label:'Kelantan' },
+    { code:'PERLIS', label:'Perlis' },
+    { code:'LABUAN', label:'W.P. Labuan' },
+  ];
+  let selectedState = 'PENANG';
+
+  const OUTLET_DATA = {
+    PENANG: [
+      'Straits City','Klippa Shopping Centre','Bandar Perda, Bukit Mertajam',
+      'Pearl City Mall','Jalan Balik Pulau','Sungai Dua, Butterworth',
+      'Beacon Executive Suites, Georgetown','Bagan Ajam, Butterworth',
+      'Karpal Singh Drive','Design Village Outlet Mall',
+      'USM - Cabin In The Woods','Taman Ara Jaya, Tasek Gelugor',
+      'Aeon Mall Bukit Mertajam','MYDIN Bukit Mertajam',
+      'PKT Logistic Batu Kawan','Tree Square, Tanjung Bungah',
+      'Kepala Batas Pokok Sena','Taman Chai Leng, Perai',
+      'Metrioplace Batu Kawan (DT)','Queensbay Mall, Bayan Lepas',
+      'Ferringhi Walk, Batu Ferringhi','Komtar Walk, Georgetown',
+      'Plaza Gurney','CALTEX Bandar Putra Bertam, Kepala Batas',
+      'Botanica, Balik Pulau','Eco Borealis, Simpang Ampat',
+      'Taman Machang Bubok, Bukit Mertajam','Iconic Point, Simpang Ampat',
+      'Jelutong','Queens Waterfront, Bayan Lepas',
+      'Macalister, Georgetown','Maju Utama, Bukit Mertajam',
+      'Raja Uda, Butterworth','Sunway Carnival Mall, Seberang Jaya',
+      'Nibong Tebal C-Mart','Alma, Bukit Mertajam',
+      'Gurney Paragon Mall','Seberang Perai, Permatang Pauh',
+      'Bayan Lepas','Ayer Itam','Tanjung Tokong',
+    ],
+    KLSELANGOR: [
+      'Binjai 8, KLCC','Bandar Menjalara','Jabatan Peguam Negara, Putrajaya',
+      'Spectrum Shopping Mall, Ampang','Temu Business Centre, City of Elmina',
+      'Brickfields','Chow Kit','Desa ParkCity','Damansara Perdana',
+      'Hartamas Shopping Centre','IOI City Mall Putrajaya','Jalan Ampang',
+      'KL Gateway Mall','KL Sentral','Kepong','Kompleks Wilayah',
+      'Masjid India','Mid Valley Megamall','Mont Kiara','Pavilion KL',
+      'Plaza VADS','Solaris Dutamas','Sunway Putra Mall','The Intermark',
+      'Times Square KL','Tropicana Gardens Mall','Wangsa Maju','Titiwangsa',
+      'Bukit Bintang','Ara Damansara','Aman Puri Kepong',
+      'Bandar Baru Klang','Bandar Bukit Puchong','Bandar Sunway',
+      'Central i-City Shah Alam','Cyberjaya','Damansara Uptown',
+      'Empire Shopping Gallery','Giant Shah Alam','Glenmarie Shah Alam',
+      'Greenfield Residence Seri Kembangan','Ijok','Kapar Klang',
+      'Klang Parade','Kota Damansara','Paradigm Mall PJ',
+      'Petaling Jaya','Puchong','Rawang','Sepang','Shah Alam',
+      'Setia City Mall Shah Alam','SS2, Petaling Jaya','Subang Jaya',
+      'Sunway Velocity Mall','Serdang','Sungai Buloh','USJ',
+      'Utama Shopping Centre (1 Utama)',
+    ],
+    JOHOR: [
+      'Paradigm Mall Johor Bahru','Bandar Seri Alam, Masai',
+      'Aeon Tebrau City','Bukit Indah','City Square JB','Danga Bay',
+      'Eco Botanic','Kluang Mall','Kulai','Larkin','Muar',
+      'Pontian','Segamat','Senai','Skudai','Taman Austin',
+      'Taman Molek','Toppen Shopping Centre','Johor Premium Outlets',
+      'Kota Iskandar','Perling Mall','Stulang Laut JB',
+    ],
+    KEDAH: [
+      'Aman Central Alor Setar','Alor Setar Mall',
+      'AEON Alor Setar','Jitra Mall','Mergong, Alor Setar',
+      'Sungai Petani Town','Kulim Hi-Tech Park','Kulim Town',
+      'Central Square Sungai Petani','Jetty Point Complex, Langkawi',
+      'KOS Langkawi',
+    ],
+    KELANTAN: [
+      'Lembah Sireh, Kota Bharu','AEON Kota Bharu','KB Mall',
+      'Kubang Kerian','Pasir Mas','Tumpat',
+    ],
+    PERAK: [
+      'Ipoh Parade','Kinta City Shopping Centre',
+      'AEON Mall Kinta City','Taiping','Teluk Intan','Lumut',
+      'Batu Gajah','Manjung','Kampar','AEON Meru Raya',
+      'Falim, Ipoh','Simpang Pulai',
+    ],
+    PAHANG: [
+      'Berjaya Megamall Kuantan','East Coast Mall Kuantan',
+      'AEON Kuantan','Bentong','Raub','Temerloh','Kuala Lipis',
+    ],
+    NSEMBILAN: [
+      'Seremban 2','Terminal One Seremban','MYDIN Seremban',
+      'Palm Mall Seremban','Nilai','Port Dickson','Bahau',
+    ],
+    MELAKA: [
+      'Mahkota Parade','AEON Bandaraya Melaka','Melaka Sentral',
+      'MYDIN Melaka','Hang Tuah Mall','Ayer Keroh','Alor Gajah',
+    ],
+    TERENGGANU: [
+      'Kuala Terengganu City Point','AEON Terengganu',
+      'Kemaman','Dungun','Marang',
+    ],
+    SABAH: [
+      'Karamunsing Shopping Complex, Kota Kinabalu',
+      '1Borneo Hypermall, Kota Kinabalu','Imago Shopping Mall, Kota Kinabalu',
+      'Suria Sabah','Oceanus Waterfront Mall',
+      'CityMall Kota Kinabalu','Tawau','Sandakan','Lahad Datu',
+    ],
+    SARAWAK: [
+      'IOI Mall Kuching','The Spring Mall Kuching',
+      'Riverside Shopping Complex, Kuching','MYDIN Kuching',
+      'Boulevard Commercial Centre, Kuching',
+      'Sibu Town','Miri Town','Bintulu Town',
+      'AEON Kuching','Permaisuri Imperial City Mall',
+    ],
+    PERLIS: [
+      'Kangar Town','TESCO Kangar','Arau',
+    ],
+    LABUAN: [
+      'Labuan Town Centre','Financial Park Labuan',
+    ],
+  };
+
+  let selectedOutlet = '';
+
+  // ── Per-store data isolation ─────────────────────────────────────────────
+  // Every store (identified by STATE::OUTLET) gets its own completely independent
+  // weekArchive, roster, and targets. Switching stores saves the current store's
+  // data and loads (or creates fresh) the target store's data.
+  function storeKey(){ return selectedState + '::' + selectedOutlet; }
+
+  let allStoreData = {};   // { "STATE::OUTLET": { weekArchive, roster, targets, cal } }
+
+  function blankRoster(){
+    // A brand new store always starts with a minimum of 4 unassigned staff slots,
+    // ready for the manager to fill in name and role.
+    return [0,1,2,3].map(()=>({
+      id: uid('st'), name:'', role:'PT', status:'active',
+      standardHours:8.5, rate:8.80, maxHours:8.5,
+      note:''
+    }));
+  }
+  function blankTargets(){
+    return {
+      weeklySalesTarget: 20000, monthlySalesTarget: 86600,
+      actualSalesWeekly: '', weeklyCap: 2900, monthlyCap: 12586,
+      dailySales: [null,null,null,null,null,null,null],
+    };
+  }
+
+  function saveCurrentStoreData(){
+    // Save the current week into weekArchive -- roster here represents the staff/roles
+    // as of THIS specific week, so re-saving never overwrites a different week's history.
+    weekArchive[weekKey(cal.month, cal.week)] = {
+      scheduleRows: JSON.parse(JSON.stringify(scheduleRows)),
+      rosterSnapshot: JSON.parse(JSON.stringify(roster)),
+      customDayNotes: JSON.parse(JSON.stringify(customDayNotes)),
+      savedAt: Date.now()
+    };
+    allStoreData[storeKey()] = {
+      weekArchive: JSON.parse(JSON.stringify(weekArchive)),
+      roster: JSON.parse(JSON.stringify(roster)),
+      targets: JSON.parse(JSON.stringify(targets)),
+      cal: JSON.parse(JSON.stringify(cal)),
+    };
+    try { localStorage.setItem('zus_all_stores', JSON.stringify(allStoreData)); } catch(e){}
+  }
+
+  // Like saveCurrentStoreData, but does NOT re-overwrite weekArchive[cal.month/week] first --
+  // use this after bulk operations (like import) that have already set specific week entries
+  // directly, so the currently-viewed week isn't accidentally clobbered.
+  function flushStoreDataOnly(){
+    allStoreData[storeKey()] = {
+      weekArchive: JSON.parse(JSON.stringify(weekArchive)),
+      roster: JSON.parse(JSON.stringify(roster)),
+      targets: JSON.parse(JSON.stringify(targets)),
+      cal: JSON.parse(JSON.stringify(cal)),
+    };
+    try { localStorage.setItem('zus_all_stores', JSON.stringify(allStoreData)); } catch(e){}
+    try { localStorage.setItem('zus_state', selectedState); localStorage.setItem('zus_outlet', selectedOutlet); } catch(e){}
+  }
+
+  function loadStoreData(sk){
+    if(allStoreData[sk]){
+      const d = allStoreData[sk];
+      weekArchive = JSON.parse(JSON.stringify(d.weekArchive || {}));
+      roster = JSON.parse(JSON.stringify(d.roster || []));
+      targets = Object.assign(blankTargets(), d.targets || {});
+      cal = d.cal ? JSON.parse(JSON.stringify(d.cal)) : { month: new Date().getMonth()+1, week: 1 };
+      cal.week = Math.min(cal.week, weeksInMonth(cal.month));
+      const wk = weekKey(cal.month, cal.week);
+      if(weekArchive[wk]){
+        scheduleRows = JSON.parse(JSON.stringify(weekArchive[wk].scheduleRows || []));
+        customDayNotes = JSON.parse(JSON.stringify(weekArchive[wk].customDayNotes || ['','','','','','','']));
+        roster = weekArchive[wk].rosterSnapshot ? JSON.parse(JSON.stringify(weekArchive[wk].rosterSnapshot)) : findMostRecentPriorRoster(cal.month, cal.week, roster);
+      } else {
+        // Week not found but keep the weekArchive intact -- inherit roster from the most
+        // recent prior week (so ongoing role changes carry forward correctly)
+        roster = findMostRecentPriorRoster(cal.month, cal.week, roster);
+        scheduleRows = roster.filter(s=>s.status==='active').map(s=>({ id:uid('row'), staffId:s.id, shifts:[0,1,2,3,4,5,6].map(()=>blankShift()) }));
+        customDayNotes = ['','','','','','',''];
+      }
+    } else {
+      // Brand new store — blank roster (4 unassigned slots) AND matching blank schedule rows
+      weekArchive = {};
+      roster = blankRoster();
+      targets = blankTargets();
+      cal = { month: new Date().getMonth()+1, week: 1 };
+      scheduleRows = roster.map(s=>({ id:uid('row'), staffId:s.id, shifts:[0,1,2,3,4,5,6].map(()=>blankShift()) }));
+      customDayNotes = ['','','','','','',''];
+    }
+    // Bump uid counter to avoid collisions
+    const allIds = [...(roster||[]).map(s=>s.id), ...scheduleRows.map(r=>r.id),
+      ...Object.values(weekArchive).flatMap(w=>(w.scheduleRows||[]).map(r=>r.id))];
+    allIds.forEach(id=>{ const n=parseInt((id||'').split('_').pop()); if(!isNaN(n)&&n>=uidCounter) uidCounter=n+1; });
+  }
+
+
+  // ── Real Straits City data, parsed from the manager's actual Excel export ──
+  // 6 verified clean weeks (June W1-4, July W1-2). Shift codes mapped from the source
+  // spreadsheet's own vocabulary (C, M, MID, OFFDAY, OFFDAY(R), BIRTHDAY LEAVE, free time ranges,
+  // and (CHAI LENG)/(PERDA) cover annotations) into this app's internal shift model.
+  const STRAITS_CITY_IMPORT_DATA = [{"month":6,"week":1,"dates":[1,2,3,4,5,6,7],"label":"June 2026 Week 1","staff":[{"name":"NURAINA","role":"OS","shifts":[{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"00","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"WANI","role":"FT","shifts":[{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"00","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"NABIHAN","role":"PT","shifts":[{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"KAYLEE","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"13","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"13","ceMM":"00","coverNote":"","coverDirection":"out"}]},{"name":"LYANA","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"IMAN","role":"PT","shifts":[{"type":"CUSTOM","midStart":600,"csHH":"17","csMM":"00","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"17","csMM":"00","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]}]},{"month":6,"week":2,"dates":[8,9,10,11,12,13,14],"label":"June 2026 Week 2","staff":[{"name":"NURAINA","role":"OS","shifts":[{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"WANI","role":"FT","shifts":[{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"NABIHAN","role":"PT","shifts":[{"type":"CUSTOM","midStart":600,"csHH":"15","csMM":"00","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"17","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"09","csMM":"00","ceHH":"17","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"LYANA","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"KAYLEE","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"13","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"13","ceMM":"00","coverNote":"","coverDirection":"out"}]},{"name":"IMAN","role":"PT","shifts":[{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"00","ceHH":"16","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"00","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"12","csMM":"00","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"16","csMM":"00","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"16","csMM":"00","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"}]}]},{"month":6,"week":3,"dates":[15,16,17,18,19,20,21],"label":"June 2026 Week 3","staff":[{"name":"NURAINA","role":"OS","shifts":[{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"09","csMM":"00","ceHH":"17","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"WANI","role":"FT","shifts":[{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"00","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"00","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"NABIHAN","role":"PT","shifts":[{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"15","csMM":"00","ceHH":"34","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"IMAN","role":"PT","shifts":[{"type":"CUSTOM","midStart":600,"csHH":"11","csMM":"00","ceHH":"30","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"00","ceHH":"17","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"LYANA","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"KAYLEE","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"13","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"14","ceMM":"00","coverNote":"","coverDirection":"out"}]}]},{"month":6,"week":4,"dates":[22,23,24,25,26,27,28],"label":"June 2026 Week 4","staff":[{"name":"NURAINA","role":"OS","shifts":[{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"WANI","role":"FT","shifts":[{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"NABIHAN","role":"PT","shifts":[{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"30","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"COVER","midStart":600,"csHH":"08","csMM":"30","ceHH":"17","ceMM":"00","coverNote":"Chai Leng","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"IMAN","role":"PT","shifts":[{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"00","ceHH":"17","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"12","csMM":"00","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"16","csMM":"00","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"LYANA","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"17","csMM":"00","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"}]},{"name":"KAYLEE","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"14","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"14","ceMM":"00","coverNote":"","coverDirection":"out"}]}]},{"month":7,"week":1,"dates":[29,30,1,2,3,4,5],"label":"July 2026 Week 1 (Jun29-Jul5)","staff":[{"name":"NURAINA","role":"OS","shifts":[{"type":"BL","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"WANI","role":"FT","shifts":[{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"00","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"NABIHAN","role":"FT","shifts":[{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"10","csMM":"00","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"IMAN","role":"PT","shifts":[{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"14","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"12","csMM":"00","ceHH":"18","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"16","csMM":"00","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"16","csMM":"00","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"}]},{"name":"LYANA","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFFDAYR","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"KAYLEE","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"14","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"14","ceMM":"00","coverNote":"","coverDirection":"out"}]}]},{"month":7,"week":2,"dates":[6,7,8,9,10,11,12],"label":"July 2026 Week 2 (Jul6-12)","staff":[{"name":"NURAINA","role":"OS","shifts":[{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"MID","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"WANI","role":"FT","shifts":[{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"MID","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"NABIHAN","role":"FT","shifts":[{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"ARSHA","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"}]},{"name":"FITRAH","role":"PT","shifts":[{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"M","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"14","csMM":"00","ceHH":"19","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"14","csMM":"00","ceHH":"19","ceMM":"30","coverNote":"","coverDirection":"out"}]},{"name":"IMAN","role":"PT","shifts":[{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"14","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"15","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"13","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"17","csMM":"00","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"}]},{"name":"LYANA","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"18","csMM":"30","ceHH":"22","ceMM":"30","coverNote":"","coverDirection":"out"},{"type":"C","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"}]},{"name":"KAYLEE","role":"PT","shifts":[{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"OFF","midStart":600,"csHH":"","csMM":"","ceHH":"","ceMM":"","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"14","ceMM":"00","coverNote":"","coverDirection":"out"},{"type":"CUSTOM","midStart":600,"csHH":"08","csMM":"30","ceHH":"14","ceMM":"00","coverNote":"","coverDirection":"out"}]}]}]
+;
+
+  const ROLE_DEFAULTS = {
+    OS: { rate: 10.41, standardHours: 8.5 },
+    FT: { rate: 8.15, standardHours: 8.5 },
+    PT: { rate: 8.80, standardHours: 8.5, maxHours: 8.5 },
+    CS: { rate: 8.15, standardHours: 8.5 },
+  };
+  const ROLE_ORDER = { OS:0, FT:1, PT:2, CS:3, NONE:4 };
+  const ROLE_GROUP_LABEL = { OS:'OUTLET SUPERVISOR', FT:'FULL TIME', PT:'PART TIME', CS:'COVER STAFF', NONE:'UNASSIGNED' };
+  const MID_STARTS = [600, 660, 720]; // 10:00, 11:00, 12:00 in minutes
+  const M_START = 510, M_END = 1020;   // 08:30 to 17:00
+  const C_START = 840, C_END = 1350;   // 14:00 to 22:30
+  const PTS1_START = 1110, PTS1_END = 1350; // 18:30 to 22:30 (4h)
+  const PTS2_START = 510, PTS2_END = 840;   // 08:30 to 14:00 (5.5h)
+
+  let uidCounter = 1;
+  function uid(prefix){ return prefix + '_' + (uidCounter++); }
+
+
+  function minToLabel(min){
+    const h = Math.floor(min/60), m = min%60;
+    return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+  }
+  function labelRange(start,end){ return `${minToLabel(start)} to ${minToLabel(end)}`; }
+  function timeStrToMin(t){
+    if(!t) return null;
+    const [h,m] = t.split(':').map(Number);
+    if(isNaN(h) || isNaN(m)) return null;
+    return h*60+m;
+  }
+  function fmt(n){ return n.toLocaleString('en-MY', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function daysInMonth(month){ return new Date(YEAR, month, 0).getDate(); }
+
+  // Real Monday-anchored calendar weeks: find the Monday on/before the 1st of the month,
+  // so every week block genuinely runs Monday -> Sunday per the actual 2026 calendar,
+  // even if it means a week spills a few days into the previous or next month.
+  function mondayAnchor(month){
+    const d1 = new Date(YEAR, month-1, 1);
+    const dow = d1.getDay(); // 0=Sun..6=Sat
+    const offsetFromMonday = (dow === 0) ? 6 : dow - 1; // days after Monday that day 1 falls on
+    const anchor = new Date(YEAR, month-1, 1 - offsetFromMonday);
+    return anchor;
+  }
+  function weeksInMonth(month){
+    // Weeks in this month = distance (in 7-day blocks) between this month's Monday anchor
+    // and next month's Monday anchor. Gives 4 weeks most of the time, and correctly gives
+    // 5 (occasionally 6) only for the months that genuinely need it -- no drift, no gaps,
+    // and no unnecessary 5th-week option cluttering months that don't need one.
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? YEAR + 1 : YEAR;
+    const a1 = mondayAnchor(month);
+    const nm1 = new Date(nextYear, nextMonth - 1, 1);
+    const dow2 = nm1.getDay();
+    const off2 = (dow2 === 0) ? 6 : dow2 - 1;
+    const a2 = new Date(nextYear, nextMonth - 1, 1 - off2);
+    const diffDays = Math.round((a2 - a1) / (1000 * 60 * 60 * 24));
+    return Math.max(Math.round(diffDays / 7), 1);
+  }
+
+  // Recurring operational routine notes, computed purely from the real date -- applies
+  // identically across every state and every store.
+  //   Monday    : Calibration, Stocks Ordering, Weekly Stocks Take
+  //               EXCEPT: no Weekly Stocks Take if EOM falls Mon/Tue/Wed/Thu of THIS week
+  //               (the EOM count already covers it), or if EOM fell Fri/Sat/Sun of the
+  //               PREVIOUS week (too close together -- the week after that resumes normally).
+  //   Thursday  : Calibration
+  //   Friday    : Stocks Receiving
+  //   Saturday  : Check Stocks for Ordering
+  //   Any day   : EOM Stocks Take, if that date is the real last calendar day of its month (28/29/30/31)
+  function isEOMDate(d){
+    const m = d.getMonth()+1;
+    return d.getDate() === daysInMonth(m);
+  }
+  function shouldSkipWeeklyStockTake(mondayDate){
+    for(let off=0; off<=3; off++){
+      const d = new Date(mondayDate.getFullYear(), mondayDate.getMonth(), mondayDate.getDate()+off);
+      if(isEOMDate(d)) return true;
+    }
+    for(let off=1; off<=3; off++){
+      const d = new Date(mondayDate.getFullYear(), mondayDate.getMonth(), mondayDate.getDate()-off);
+      if(isEOMDate(d)) return true;
+    }
+    return false;
+  }
+  function operationalNotesFor(dateNum, weekdayIdx, month){
+    const notes = [];
+    const lastDay = daysInMonth(month);
+    const isEOM = dateNum === lastDay;
+    if(isEOM) notes.push('EOM Stocks Take');
+    if(weekdayIdx === 1){ // Monday
+      notes.push('Calibration');
+      notes.push('Stocks Ordering');
+      const mondayDate = new Date(YEAR, month-1, dateNum);
+      if(!shouldSkipWeeklyStockTake(mondayDate)){ notes.push('Weekly Stocks Take'); }
+    } else if(weekdayIdx === 4){ // Thursday
+      notes.push('Calibration');
+    } else if(weekdayIdx === 5){ // Friday
+      notes.push('Stocks Receiving');
+    } else if(weekdayIdx === 6){ // Saturday
+      notes.push('Check Stocks for Ordering');
+    }
+    return notes;
+  }
+
+  function ordinal(n){
+    const s = ['th','st','nd','rd'];
+    const v = n % 100;
+    return n + (s[(v-20)%10] || s[v] || s[0]);
+  }
+
+  function paidHoursFor(grossHrs, role, staff){
+    if(grossHrs<=0) return 0;
+    // CS: follow their position (FT or PT) for break rules
+    const effectiveRole = (role==='CS' && staff && staff.csPosition) ? staff.csPosition : role;
+    if(effectiveRole!=='PT') return grossHrs;
+    if(grossHrs < 5) return Math.max(0, grossHrs - 0.5);
+    return Math.max(0, grossHrs - 1);
+  }
+
+  // ---------- ROSTER ----------
+  let roster = [
+    { id:'st_nuraina', name:'Nuraina', role:'OS', status:'active', standardHours:8.5, rate:10.41, note:'' },
+    { id:'st_wani', name:'Wani', role:'FT', status:'active', standardHours:8.5, rate:8.15, note:'' },
+    { id:'st_nabihan', name:'Nabihan', role:'PT', status:'active', standardHours:8.5, rate:8.80, note:'' },
+    { id:'st_iman', name:'Iman', role:'PT', status:'active', standardHours:8.5, rate:8.80, note:'' },
+    { id:'st_lyana', name:'Lyana', role:'PT', status:'active', standardHours:8.5, rate:8.80, note:'' },
+    { id:'st_kaylee', name:'Kaylee', role:'PT', status:'active', standardHours:8.5, rate:8.80, note:'' },
+  ];
+
+  function blankShift(){ return { type:'OFF', midStart: 600, csHH:'', csMM:'', ceHH:'', ceMM:'', coverNote:'', coverDirection:'out' }; }
+
+  // ---------- SCHEDULE ROWS (7 column slots, relabelled by the calendar picker) ----------
+  let scheduleRows = [
+    { id:uid('row'), staffId:'st_nuraina', shifts:['C','M','CUSTOM','C','M','C','OFF'] },
+    { id:uid('row'), staffId:'st_wani',    shifts:['C','C','C','M','M','OFF','C'] },
+    { id:uid('row'), staffId:'st_nabihan', shifts:['M','OFF','M','M','C','M','OFF'] },
+    { id:uid('row'), staffId:'st_iman',    shifts:['MID','C','OFF','M','C','OFF','MID'] },
+    { id:uid('row'), staffId:'st_lyana',   shifts:['OFF','MID','MID','MID','OFF','MID','OFF'] },
+    { id:uid('row'), staffId:'st_kaylee',  shifts:['OFF','OFF','OFF','OFF','OFF','MID','MID'] },
+  ].map(r => ({
+    id: r.id, staffId: r.staffId,
+    shifts: r.shifts.map((t) => {
+      const s = blankShift(); s.type = t;
+      if(t==='MID') s.midStart = (r.staffId==='st_lyana') ? 720 : 600;
+      if(t==='CUSTOM'){ s.csHH='09'; s.csMM='00'; s.ceHH='17'; s.ceMM='30'; }
+      return s;
+    })
+  }));
+
+  // ---------- TARGETS (global settings, not week-specific) ----------
+  let targets = {
+    weeklySalesTarget: 20000,
+    monthlySalesTarget: 86600,
+    weeklyCap: 2900,
+    monthlyCap: 12586,
+  };
+
+  // ---------- DAILY / WEEKLY SALES (per week — resets on a new, unsaved week) ----------
+  let dailySales = [null,null,null,null,null,null,null];
+  // ---------- CUSTOM PER-DAY NOTES (per week, editable, for one-off events) ----------
+  let customDayNotes = ['','','','','','',''];
+  function weeklyActualSales(){
+    return dailySales.reduce((sum,v)=> sum + (typeof v==='number' && !isNaN(v) ? v : 0), 0);
+  }
+  function anyDailySalesEntered(){
+    return dailySales.some(v => typeof v==='number' && !isNaN(v));
+  }
+
+  // ---------- CALENDAR ----------
+  let cal = { month: 6, week: 3 }; // June, week 3 (15-21)
+
+  function weekKey(m,w){ return `${m}-${w}`; }
+  function weekOrder(m,w){ return m*10 + w; }
+
+  // Find the roster that should apply to a NEW/blank week: the most recent PRIOR
+  // week's saved snapshot (chronologically, not just whatever was last viewed), so a
+  // role change made this week correctly carries forward to every future week until
+  // changed again, without touching any week before it.
+  function findMostRecentPriorRoster(month, week, fallback){
+    const targetOrder = weekOrder(month, week);
+    let best = null, bestOrder = -1;
+    Object.keys(weekArchive).forEach(key=>{
+      const [m,w] = key.split('-').map(Number);
+      const order = weekOrder(m,w);
+      if(order < targetOrder && order > bestOrder && weekArchive[key].rosterSnapshot){
+        bestOrder = order;
+        best = weekArchive[key].rosterSnapshot;
+      }
+    });
+    return best ? JSON.parse(JSON.stringify(best)) : JSON.parse(JSON.stringify(fallback));
+  }
+
+  // ── Import real Straits City data (from the manager's Excel export) ────────
+  function weekHasRealData(rows){
+    if(!rows || !rows.length) return false;
+    return rows.some(r => r.shifts.some(sh => sh.type !== 'OFF'));
+  }
+
+  function buildImportRoster(){
+    // Collect every distinct staff name across the 6 imported weeks, using the role
+    // from the LATEST week they appear in (roles evolved over time, e.g. Nabihan PT->FT).
+    const latestRole = {};
+    STRAITS_CITY_IMPORT_DATA.forEach(wk=>{
+      wk.staff.forEach(s=>{
+        if(!s.name) return;
+        latestRole[s.name] = s.role; // later weeks overwrite earlier ones since array is chronological
+      });
+    });
+    const merged = [];
+    Object.keys(latestRole).forEach(name=>{
+      const role = latestRole[name];
+      const existing = roster.find(r => r.name.trim().toUpperCase() === name.trim().toUpperCase());
+      if(existing){
+        // keep their id/rate, just sync role if it changed
+        if(existing.role !== role){
+          existing.role = role;
+          const d = ROLE_DEFAULTS[role];
+          if(d){ existing.rate = d.rate; existing.standardHours = d.standardHours; }
+        }
+        merged.push(existing);
+      } else {
+        const d = ROLE_DEFAULTS[role] || ROLE_DEFAULTS['PT'];
+        merged.push({
+          id: uid('st'), name: titleCase(name), role, status:'active',
+          standardHours: d.standardHours, rate: d.rate, maxHours: d.maxHours,
+          note:''
+        });
+      }
+    });
+    return merged;
+  }
+
+  function titleCase(s){ return s.split(' ').map(w=>w.charAt(0)+w.slice(1).toLowerCase()).join(' '); }
+
+  function buildImportScheduleRows(wk, importRoster){
+    return wk.staff.filter(s=>s.name).map(s=>{
+      const staffEntry = importRoster.find(r => r.name.trim().toUpperCase() === s.name.trim().toUpperCase());
+      return {
+        id: uid('row'),
+        staffId: staffEntry ? staffEntry.id : null,
+        shifts: s.shifts.map(sh => Object.assign({ midStart:600, csHH:'', csMM:'', ceHH:'', ceMM:'', coverNote:'', coverDirection:'out' }, sh))
+      };
+    });
+  }
+
+  // Build the roster snapshot for THIS SPECIFIC week, using that week's own role
+  // assignments from the source data (not the merged/latest-role master roster) --
+  // this is what makes Nabihan correctly show PT in June and FT in July.
+  function buildWeekRosterSnapshot(wk, masterRoster){
+    return wk.staff.filter(s=>s.name).map(s=>{
+      const masterEntry = masterRoster.find(r => r.name.trim().toUpperCase() === s.name.trim().toUpperCase());
+      const d = ROLE_DEFAULTS[s.role] || ROLE_DEFAULTS['PT'];
+      return {
+        id: masterEntry ? masterEntry.id : uid('st'),
+        name: masterEntry ? masterEntry.name : titleCase(s.name),
+        role: s.role, status: 'active',
+        standardHours: d.standardHours, rate: d.rate, maxHours: d.maxHours,
+        note:''
+      };
+    });
+  }
+
+  function startImportReview(){
+    if(!(selectedState==='PENANG' && selectedOutlet==='Straits City')){
+      alert('This real dataset is specific to Straits City. Switch State/Outlet to P. Pinang \u203a Straits City first.');
+      return;
+    }
+    const importRoster = buildImportRoster();
+    const conflicts = [];
+    const autoImported = [];
+    STRAITS_CITY_IMPORT_DATA.forEach(wk=>{
+      const key = weekKey(wk.month, wk.week);
+      const existing = weekArchive[key];
+      const existingHasData = existing && weekHasRealData(existing.scheduleRows);
+      const incomingRows = buildImportScheduleRows(wk, importRoster);
+      const weekSnapshot = buildWeekRosterSnapshot(wk, importRoster);
+      if(existingHasData){
+        conflicts.push({ key, wk, incomingRows, weekSnapshot, existingSnapshot: JSON.parse(JSON.stringify(existing)) });
+      } else {
+        weekArchive[key] = { scheduleRows: incomingRows, rosterSnapshot: weekSnapshot, savedAt: Date.now() };
+        autoImported.push(wk.label);
+      }
+    });
+    roster = importRoster;
+    flushStoreDataOnly();
+    if(conflicts.length === 0){
+      const currentKey = weekKey(cal.month, cal.week);
+      if(weekArchive[currentKey]){
+        scheduleRows = JSON.parse(JSON.stringify(weekArchive[currentKey].scheduleRows));
+        roster = JSON.parse(JSON.stringify(weekArchive[currentKey].rosterSnapshot));
+      }
+      alert(`Imported ${autoImported.length} week(s) with no conflicts:\n${autoImported.join('\n')}`);
+      render();
+    } else {
+      importConflicts = { list: conflicts, autoImported, importRoster };
+      render();
+    }
+  }
+
+  function resolveImportConflict(key, choice, incomingRows, importRoster){
+    if(choice === 'imported'){
+      const item = importConflicts.list.find(c => c.key === key);
+      const snapshot = item ? item.weekSnapshot : JSON.parse(JSON.stringify(importRoster));
+      weekArchive[key] = { scheduleRows: incomingRows, rosterSnapshot: snapshot, savedAt: Date.now() };
+    }
+    // 'existing' choice: leave weekArchive[key] untouched
+    importConflicts.list = importConflicts.list.filter(c => c.key !== key);
+    flushStoreDataOnly();
+    if(importConflicts.list.length === 0){
+      importConflicts = null;
+      // Refresh the live in-memory view in case the currently-displayed week was just resolved,
+      // so the normal schedule screen shows up to date data instead of stale pre-import values.
+      const currentKey = weekKey(cal.month, cal.week);
+      if(weekArchive[currentKey]){
+        scheduleRows = JSON.parse(JSON.stringify(weekArchive[currentKey].scheduleRows));
+        roster = JSON.parse(JSON.stringify(weekArchive[currentKey].rosterSnapshot));
+      }
+    }
+    render();
+  }
+
+
+  // ---------- OVERTIME (weekly, per staff) ----------
+  let otHours = {}; // { staffId: 0.5-step number of OT hours this week }
+  const OT_STEPS = [0, 0.5, 1, 1.5, 2, 2.5, 3];
+  function getOtHours(staffId){ return otHours[staffId] || 0; }
+  function otRateFor(staff){ return staff ? staff.rate * 1.5 : 0; }
+  function otCostFor(staffId){
+    const staff = getStaff(staffId);
+    return getOtHours(staffId) * otRateFor(staff);
+  }
+  function totalOtCost(){
+    let t = 0;
+    roster.forEach(s => { t += otCostFor(s.id); });
+    return t;
+  }
+
+  // ---------- PERSISTENCE (saved in this browser only) ----------
+  let weekArchive = {}; // { "month-week": { scheduleRows, rosterSnapshot, otHours, savedAt } }
+  try {
+    const savedState = localStorage.getItem('zus_state');
+    const savedOutlet = localStorage.getItem('zus_outlet');
+    const savedAllStores = localStorage.getItem('zus_all_stores');
+    if(savedState && STATE_HOLIDAYS[savedState]) selectedState = savedState;
+    if(savedOutlet) selectedOutlet = savedOutlet;
+    if(!selectedOutlet) selectedOutlet = (OUTLET_DATA[selectedState]||[])[0] || '';
+    if(savedAllStores) allStoreData = JSON.parse(savedAllStores);
+
+    // One-time forced cleanup across EVERY saved store: wipe any note text saved from an
+    // earlier session (roster + every historical week's own snapshot), since a code change
+    // alone can't retroactively clear data already saved in the browser.
+    if(!localStorage.getItem('zus_notes_cleared_v1')){
+      Object.values(allStoreData).forEach(store=>{
+        if(store.roster) store.roster.forEach(s=>{ s.note=''; });
+        if(store.weekArchive) Object.values(store.weekArchive).forEach(w=>{
+          if(w.rosterSnapshot) w.rosterSnapshot.forEach(s=>{ s.note=''; });
+        });
+      });
+      try { localStorage.setItem('zus_all_stores', JSON.stringify(allStoreData)); } catch(e){}
+      try { localStorage.setItem('zus_notes_cleared_v1', '1'); } catch(e){}
+    }
+
+    // Migrate legacy single-store data if present and this store has no meaningful roster yet
+    const legacyWeeks = localStorage.getItem('zus_weeks');
+    const legacyRoster = localStorage.getItem('zus_roster');
+    const legacyTargets = localStorage.getItem('zus_targets');
+    const legacyCal = localStorage.getItem('zus_cal');
+    const existingStore = allStoreData[storeKey()];
+    const storeHasData = existingStore && existingStore.roster && existingStore.roster.length > 0;
+    if(!storeHasData && legacyRoster){
+      // Legacy data found — migrate it to this store slot, preserving it
+      allStoreData[storeKey()] = {
+        weekArchive: legacyWeeks ? JSON.parse(legacyWeeks) : {},
+        roster: JSON.parse(legacyRoster),
+        targets: legacyTargets ? JSON.parse(legacyTargets) : {},
+        cal: legacyCal ? JSON.parse(legacyCal) : null,
+      };
+    }
+
+    // ── One-time cleanup: keep only Straits City (Penang) data, clear everything else ──
+    if(!localStorage.getItem('zus_cleanup_straits_v1')){
+      const keepKey = 'PENANG::Straits City';
+      Object.keys(allStoreData).forEach(k=>{
+        if(k !== keepKey) delete allStoreData[k];
+      });
+      try { localStorage.setItem('zus_all_stores', JSON.stringify(allStoreData)); } catch(e){}
+      try { localStorage.setItem('zus_cleanup_straits_v1', '1'); } catch(e){}
+    }
+
+    // Load this store's data
+    loadStoreData(storeKey());
+
+    // ── Prevent ID collisions: bump uidCounter above every existing numeric ID suffix ──
+    const allIds = [
+      ...roster.map(s=>s.id),
+      ...scheduleRows.map(r=>r.id),
+      ...Object.values(weekArchive).flatMap(w=>(w.scheduleRows||[]).map(r=>r.id))
+    ];
+    allIds.forEach(id=>{
+      const n = parseInt((id||'').split('_').pop());
+      if(!isNaN(n) && n >= uidCounter) uidCounter = n + 1;
+    });
+  } catch(e){ console.warn('Saved schedule data could not be loaded:', e); }
+
+  function persistCurrent(){
+    try {
+      weekArchive[weekKey(cal.month, cal.week)] = {
+        scheduleRows: JSON.parse(JSON.stringify(scheduleRows)),
+        rosterSnapshot: JSON.parse(JSON.stringify(roster)),
+        customDayNotes: JSON.parse(JSON.stringify(customDayNotes)),
+        savedAt: Date.now()
+      };
+      saveCurrentStoreData();
+      localStorage.setItem('zus_state', selectedState);
+      localStorage.setItem('zus_outlet', selectedOutlet);
+    } catch(e){ console.warn('Could not save schedule data:', e); }
+  }
+
+  function switchWeek(newMonth, newWeek){
+    persistCurrent();
+    if(newMonth!==null) cal.month = newMonth;
+    cal.week = Math.min(newWeek!==null ? newWeek : cal.week, weeksInMonth(cal.month));
+    const key = weekKey(cal.month, cal.week);
+    if(weekArchive[key]){
+      scheduleRows = JSON.parse(JSON.stringify(weekArchive[key].scheduleRows));
+      customDayNotes = JSON.parse(JSON.stringify(weekArchive[key].customDayNotes || ['','','','','','','']));
+      roster = weekArchive[key].rosterSnapshot ? JSON.parse(JSON.stringify(weekArchive[key].rosterSnapshot)) : findMostRecentPriorRoster(cal.month, cal.week, roster);
+    } else {
+      // blank/new week: keep same staff rows but clear shifts, and inherit the roster
+      // (roles/rates) from the most recent PRIOR week -- so a role change made last week
+      // correctly carries forward, without touching any week before it.
+      const inherited = findMostRecentPriorRoster(cal.month, cal.week, roster);
+      scheduleRows = inherited.filter(s=>s.status==='active').map(s => ({ id: uid('row'), staffId: s.id, shifts: [0,1,2,3,4,5,6].map(()=>blankShift()) }));
+      customDayNotes = ['','','','','','',''];
+      roster = inherited;
+    }
+    render();
+  }
+
+  let activeTab = 'schedule';
+  let importConflicts = null; // when set, shows the "review conflicts" screen instead of the normal schedule
+
+  const root = document.getElementById('zus-scheduler');
+
+  function getStaff(id){ return roster.find(s=>s.id===id); }
+
+  // For a day that's "borrowed" from a different month (e.g. June 29-30 sitting inside
+  // July's Week 1), look up what role this staff actually held THAT month, instead of
+  // blindly using the currently-displayed week's role. Promotions always take effect on
+  // the 1st, so any saved week within the prior month carries the correct pre-promotion
+  // role. Falls back to the current-week staff object if no historical record exists yet.
+  function getEffectiveStaffForDay(baseStaff, col){
+    if(!baseStaff || !col || col.inSelectedMonth !== false) return baseStaff;
+    const realMonth = col.month;
+    const lastWk = weeksInMonth(realMonth);
+    for(let w = lastWk; w >= 1; w--){
+      const key = weekKey(realMonth, w);
+      if(weekArchive[key] && weekArchive[key].rosterSnapshot){
+        const found = weekArchive[key].rosterSnapshot.find(s => s.id === baseStaff.id);
+        if(found) return found;
+      }
+    }
+    return baseStaff;
+  }
+
+  function getColumnsFor(month, week){
+    const anchor = mondayAnchor(month);
+    const weekStart = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + (week-1)*7);
+    const cols = [];
+    for(let i=0;i<7;i++){
+      const d = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i);
+      const dateNum = d.getDate();
+      const dMonth = d.getMonth() + 1; // the ACTUAL month this date belongs to (may differ from selected month near boundaries)
+      const weekday = WEEKDAY_NAMES[d.getDay()];
+      const holiday = (STATE_HOLIDAYS[selectedState] || {})[`${dMonth}-${dateNum}`] || null;
+      // ZUS Day: recurring every Tuesday, applies across all states and stores
+      const weeklyNote = (d.getDay()===2) ? 'ZDB3F1' : null;
+      const inSelectedMonth = dMonth === month;
+      const opNotes = operationalNotesFor(dateNum, d.getDay(), dMonth);
+      cols.push({ valid:true, dateNum, weekday, isWeekend: (d.getDay()===0||d.getDay()===6), holiday, weeklyNote, month: dMonth, inSelectedMonth, opNotes });
+    }
+    return cols;
+  }
+  function getColumns(){ return getColumnsFor(cal.month, cal.week); }
+
+  function shiftHours(shift, staff){
+    const role = staff ? staff.role : null;
+    if(shift.type==='OFF'){
+      if(role==='OS' || role==='FT'){
+        return { gross:0, paid:8.5, label:'Paid Off Day', paidOff:true };
+      }
+      return { gross:0, paid:0, label:'' };
+    }
+    if(shift.type==='OFFDAYR'){
+      // Requested day off: paid only for OS/FT, unpaid for PT/CS
+      if(role==='OS' || role==='FT'){
+        return { gross:0, paid:8.5, label:'Requested Off (Paid)', paidOff:true };
+      }
+      return { gross:0, paid:0, label:'', paidOff:false };
+    }
+    if(shift.type==='AL'){
+      if(role==='OS' || role==='FT') return { gross:0, paid:8.5, label:'Annual Leave', paidOff:true };
+      return { gross:0, paid:0, label:'', paidOff:false };
+    }
+    if(shift.type==='BL'){
+      // Birthday Leave: only meaningful for OS/FT, paid 8.5h same as off day
+      if(role==='OS' || role==='FT') return { gross:0, paid:8.5, label:'Birthday Leave', paidOff:true };
+      return { gross:0, paid:0, label:'', paidOff:false };
+    }
+    if(shift.type==='MC'){
+      // Medical Certificate Leave: unpaid for everyone
+      return { gross:0, paid:0, label:'MC', paidOff:false };
+    }
+    if(shift.type==='M'){ const g=(M_END-M_START)/60; return { gross:g, paid:paidHoursFor(g,role,staff), label: labelRange(M_START,M_END) }; }
+    if(shift.type==='C'){ const g=(C_END-C_START)/60; return { gross:g, paid:paidHoursFor(g,role,staff), label: labelRange(C_START,C_END) }; }
+    if(shift.type==='PTS1'){ const g=(PTS1_END-PTS1_START)/60; return { gross:g, paid:paidHoursFor(g,role,staff), label: labelRange(PTS1_START,PTS1_END) }; }
+    if(shift.type==='PTS2'){ const g=(PTS2_END-PTS2_START)/60; return { gross:g, paid:paidHoursFor(g,role,staff), label: labelRange(PTS2_START,PTS2_END) }; }
+    if(shift.type==='MID'){
+      const stdH = staff ? staff.standardHours : 8.5;
+      const start = shift.midStart;
+      const end = start + stdH*60;
+      return { gross:stdH, paid:paidHoursFor(stdH,role,staff), label: labelRange(start,end) };
+    }
+    if(shift.type==='CUSTOM'){
+      if(shift.csHH==='' || shift.csMM==='' || shift.ceHH==='' || shift.ceMM===''){ return { gross:0, paid:0, label:'' }; }
+      const startMin = parseInt(shift.csHH)*60 + parseInt(shift.csMM);
+      const endMin = parseInt(shift.ceHH)*60 + parseInt(shift.ceMM);
+      if(endMin<=startMin) return { gross:0, paid:0, label:'' };
+      const g = (endMin-startMin)/60;
+      return { gross:g, paid:paidHoursFor(g,role,staff), label: labelRange(startMin,endMin) };
+    }
+    if(shift.type==='COVER'){
+      if(shift.csHH==='' || shift.csMM==='' || shift.ceHH==='' || shift.ceMM===''){ return { gross:0, paid:0, label:'', coverOut:(shift.coverDirection==='out') }; }
+      const startMin = parseInt(shift.csHH)*60 + parseInt(shift.csMM);
+      const endMin = parseInt(shift.ceHH)*60 + parseInt(shift.ceMM);
+      if(endMin<=startMin) return { gross:0, paid:0, label:'', coverOut:(shift.coverDirection==='out') };
+      const g = (endMin-startMin)/60;
+      // Cover OUT = staff goes to another outlet, NOT charged to our budget (paid=0 for cost)
+      // Cover IN = external staff covers us, IS charged to our budget
+      const coverOut = shift.coverDirection==='out';
+      return { gross:g, paid: coverOut ? 0 : paidHoursFor(g,role,staff), label: labelRange(startMin,endMin), coverOut };
+    }
+    return { gross:0, paid:0, label:'' };
+  }
+
+  function rowWeekly(row, columns){
+    columns = columns || getColumns();
+    const staff = getStaff(row.staffId);
+    let gross=0, paid=0, cost=0;
+    const breakdown = {}; // { 'PT': {days, hours, cost}, 'FT': {...} } -- only populated when a day's effective role differs from the base staff's current role
+    row.shifts.forEach((sh, di) => {
+      const col = columns[di];
+      const effStaff = getEffectiveStaffForDay(staff, col);
+      const h = shiftHours(sh, effStaff);
+      gross += h.gross;
+      paid += h.paid;
+      const dayCost = h.paid * (effStaff ? effStaff.rate : 0);
+      cost += dayCost;
+      if(effStaff && h.paid > 0){
+        const key = effStaff.role + (effStaff.role==='CS' ? (':'+(effStaff.csPosition||'FT')) : '');
+        if(!breakdown[key]) breakdown[key] = { days:0, hours:0, cost:0, rate: effStaff.rate };
+        breakdown[key].days += 1;
+        breakdown[key].hours += h.paid;
+        breakdown[key].cost += dayCost;
+      }
+    });
+    const otH = row.staffId ? getOtHours(row.staffId) : 0;
+    const otC = row.staffId ? otCostFor(row.staffId) : 0;
+    const mixedRate = Object.keys(breakdown).length > 1;
+    return { gross, paid, cost: cost + otC, baseCost: cost, otHours: otH, otCost: otC, staff, breakdown, mixedRate };
+  }
+
+  function staffWeeklyGross(staffId, columns){
+    columns = columns || getColumns();
+    let g = 0;
+    const staff = getStaff(staffId);
+    scheduleRows.forEach(r=>{
+      if(r.staffId===staffId) r.shifts.forEach((sh, di)=>{
+        const effStaff = getEffectiveStaffForDay(staff, columns[di]);
+        g += shiftHours(sh, effStaff).gross;
+      });
+    });
+    return g;
+  }
+
+  function totalWeeklyCost(){
+    const columns = getColumns();
+    let t = 0;
+    scheduleRows.forEach(r => { t += rowWeekly(r, columns).cost; });
+    return t;
+  }
+
+  function roleSubtotal(role){
+    const columns = getColumns();
+    let paid=0, cost=0;
+    scheduleRows.forEach(r=>{
+      const staff = getStaff(r.staffId);
+      if(staff && staff.role===role){ const w = rowWeekly(r, columns); paid+=w.paid; cost+=w.cost; }
+    });
+    return {paid, cost};
+  }
+
+  function headcountForDay(di){
+    let m=0, mid=0, c=0, cov=0, pts=0;
+    scheduleRows.forEach(r=>{
+      const t = r.shifts[di].type;
+      if(t==='M') m++; else if(t==='MID') mid++; else if(t==='C') c++;
+      else if(t==='CUSTOM') mid++; else if(t==='COVER') cov++;
+      else if(t==='PTS1' || t==='PTS2') pts++;
+    });
+    return {m,mid,c,cov,pts};
+  }
+
+  function validate(columns){
+    const violations = [];
+    const notices = [];
+    scheduleRows.forEach((row, ri) => {
+      const staff = getStaff(row.staffId);
+      const working = row.shifts.map((s,i)=>({s,i})).filter(x=>x.s.type!=='OFF' && x.s.type!=='OFFDAYR' && x.s.type!=='AL' && x.s.type!=='BL' && x.s.type!=='MC');
+      if(!staff){
+        if(working.length>0) violations.push(`Row ${ri+1}: shifts are set but no staff is assigned. Pick a name.`);
+        return;
+      }
+      if(staff.status==='inactive' && working.length>0){
+        violations.push(`${staff.name} is marked inactive/resigned but has shifts scheduled this week.`);
+      }
+      working.forEach(x=>{
+        const effStaff = getEffectiveStaffForDay(staff, columns[x.i]);
+        const {gross} = shiftHours(x.s, effStaff);
+        const col = columns[x.i];
+        const dayTag = col && col.valid ? `${col.weekday} ${ordinal(col.dateNum)}` : `day ${x.i+1}`;
+        // Rule 1 — all roles: shift under 4h is a red violation
+        if(gross>0 && gross<4){
+          violations.push(`${staff.name}: ${dayTag} shift is ${gross.toFixed(1)}h - below the 4h minimum.`);
+        }
+        // Rule 2 — OS and FT: every working shift must be 8.5h
+        else if((effStaff.role==='OS' || effStaff.role==='FT') && gross>0 && gross<8.5){
+          violations.push(`${staff.name}: ${dayTag} shift is ${gross.toFixed(1)}h - below the 8.5h full-day requirement for OS/FT.`);
+        }
+        // Rule 3 — CS: follows their position's day rule
+        else if(effStaff.role==='CS'){
+          const pos = effStaff.csPosition || 'FT';
+          if(pos==='FT' && gross>0 && gross<8.5){
+            violations.push(`${staff.name}: ${dayTag} shift is ${gross.toFixed(1)}h - below the 8.5h requirement for CS (FT position).`);
+          }
+        }
+        // Unset CUSTOM/COVER time
+        if((x.s.type==='CUSTOM' || x.s.type==='COVER') && gross===0){
+          notices.push(`${staff.name}: ${dayTag} ${x.s.type} shift has no start or end time set yet.`);
+        }
+      });
+      // Rule 4 — max days per week (optional per-staff setting, no role default)
+    });
+    // Rule 5 — role-based weekly hour minimum (purely by role, no per-staff exceptions)
+    // PT: 31.5h/week amber notice. FT/OS/CS: no weekly minimum (8.5h/shift rule covers them).
+    roster.forEach(staff=>{
+      if(staff.role==='PT' && staff.status==='active'){
+        const g = staffWeeklyGross(staff.id, columns);
+        if(g < 31.5){
+          notices.push(`${staff.name} (PT): scheduled ${g.toFixed(1)}h this week - below the 31.5h PT contract minimum.`);
+        }
+      }
+      // Rule 6 — always flag inactive/resigned staff still in the roster, as a reminder
+      if(staff.status==='inactive'){
+        notices.push(`${staff.name} is marked Inactive / Resigned. Confirm they should be removed from payroll if this is final.`);
+      }
+    });
+    return { violations, notices };
+  }
+
+  function roleLabel(role){ return role==='OS'?'Outlet Supervisor':role==='FT'?'Full Timer':role==='CS'?'Cover Staff':'Part Timer'; }
+
+  // ---------- Generic helpers for read-only history (take an explicit roster snapshot) ----------
+  function rowWeeklyFor(rosterArr, row, otMap, columns){
+    const staff = rosterArr.find(s=>s.id===row.staffId);
+    let gross=0, paid=0, cost=0;
+    row.shifts.forEach((sh, di)=>{
+      const col = columns ? columns[di] : null;
+      const effStaff = col ? (getEffectiveStaffForDay(staff, col) || staff) : staff;
+      const h=shiftHours(sh, effStaff);
+      gross+=h.gross; paid+=h.paid;
+      cost += h.paid * (effStaff ? effStaff.rate : 0);
+    });
+    const rate = staff?staff.rate:0;
+    const otH = (otMap && row.staffId) ? (otMap[row.staffId]||0) : 0;
+    const otC = otH * rate * 1.5;
+    return { gross, paid, cost: cost + otC, otHours: otH, otCost: otC, staff };
+  }
+  function totalWeeklyCostFor(rosterArr, rows, otMap){
+    let t=0; rows.forEach(r=>{ t+=rowWeeklyFor(rosterArr,r,otMap).cost; }); return t;
+  }
+  function shiftDisplayLabel(shift, staff){
+    if(shift.type==='OFF') return '<span class="ro-off">OFF</span>';
+    if(shift.type==='OFFDAYR') return '<span class="ro-offr">OFFDAY (R)</span>';
+    const h = shiftHours(shift, staff);
+    if(h.gross<=0) return `<span class="ro-off">${shift.type}</span>`;
+    return `<b>${shift.type}</b><br>${h.label}<br>${h.paid.toFixed(1)}h`;
+  }
+
+  // track which month accordions are open (by "month" number as string key)
+  let openMonths = {};
+
+  function renderHistory(){
+    const currentKey = weekKey(cal.month, cal.week);
+    const keys = Object.keys(weekArchive).filter(k=>k!==currentKey);
+    if(keys.length===0) return '';
+    keys.sort((a,b)=>{
+      const [am,aw]=a.split('-').map(Number), [bm,bw]=b.split('-').map(Number);
+      return (bm*10+bw)-(am*10+aw);
+    });
+
+    // Group by month
+    const byMonth = {};
+    keys.forEach(key=>{
+      const [m] = key.split('-').map(Number);
+      if(!byMonth[m]) byMonth[m]=[];
+      byMonth[m].push(key);
+    });
+    const months = Object.keys(byMonth).map(Number).sort((a,b)=>b-a);
+
+    let html = `<div class="zs-section-title" style="margin-top:26px;">Schedule History</div>
+      <p class="zs-note" style="margin-top:-6px;">Saved automatically every time you switch weeks. Tap a month to expand its weeks.</p>`;
+
+    months.forEach(m=>{
+      const monthKeys = byMonth[m];
+      const isOpen = !!openMonths[m];
+
+      // Month-level summary: total salary across all weeks, count of weeks
+      let monthTotal = 0;
+      monthKeys.forEach(key=>{
+        const data = weekArchive[key];
+        const rRoster = data.rosterSnapshot || roster;
+        monthTotal += totalWeeklyCostFor(rRoster, data.scheduleRows, data.otHours);
+      });
+      const weekCount = monthKeys.length;
+
+      html += `<div class="zs-month-group ${isOpen?'open':''}" data-month="${m}">
+        <div class="zs-month-header" data-toggle-month="${m}">
+          <div class="zs-month-header-left">
+            <span class="zs-month-chevron">›</span>
+            <span class="zs-month-title">${MONTH_NAMES[m-1]} ${YEAR}</span>
+            <span class="zs-month-badge">${weekCount} week${weekCount>1?'s':''} saved</span>
+          </div>
+          <div class="zs-month-summary">
+            <span class="zs-month-cost">RM ${fmt(monthTotal)} total</span>
+          </div>
+        </div>
+        <div class="zs-month-body">`;
+
+      monthKeys.forEach(key=>{
+        const [,w] = key.split('-').map(Number);
+        const data = weekArchive[key];
+        const rRoster = data.rosterSnapshot || roster;
+        const rRows = data.scheduleRows;
+        const cols = getColumnsFor(m,w);
+        const validCols = cols.filter(c=>c.valid);
+        const rangeLabel = (() => {
+          if(!validCols.length) return '';
+          const first = validCols[0], last = validCols[validCols.length-1];
+          if(first.month === last.month){
+            return `${ordinal(first.dateNum)} to ${ordinal(last.dateNum)} ${MONTH_NAMES[first.month-1]}`;
+          }
+          return `${ordinal(first.dateNum)} ${MONTH_NAMES[first.month-1]} to ${ordinal(last.dateNum)} ${MONTH_NAMES[last.month-1]}`;
+        })();
+        const total = totalWeeklyCostFor(rRoster, rRows, data.otHours);
+        const savedLabel = data.savedAt ? new Date(data.savedAt).toLocaleString() : '';
+
+        html += `<div class="zs-week-card">
+          <div class="zs-week-card-head">
+            <span>Week ${w} &nbsp;·&nbsp; ${rangeLabel}, ${YEAR}</span>
+            <span class="wk-right">
+              RM ${fmt(total)}
+              <span style="font-weight:400;font-size:10px;color:var(--ink-soft);">saved ${savedLabel}</span>
+              <button class="zs-mini-btn danger" data-delete-week="${key}">Delete</button>
+            </span>
+          </div>
+          <div class="zs-table-wrap"><table class="zs-table zs-readonly">
+            <colgroup>
+              <col style="width:150px;">
+              <col><col><col><col><col><col><col>
+              <col style="width:110px;">
+              <col style="width:55px;">
+            </colgroup>
+            <thead><tr class="zs-days"><th class="zs-name-col">Staff</th>${cols.map((c,ci)=>c.valid?`<th${c.inSelectedMonth===false?' style="opacity:0.55;"':''}>${c.weekday} ${ordinal(c.dateNum)}${c.inSelectedMonth===false?` <span style="font-size:8px;">(${MONTH_NAMES[c.month-1].slice(0,3)})</span>`:''}${c.holiday?`<span class="ph-tag">${c.holiday}</span>`:''}${c.weeklyNote?`<span class="zus-day-tag">${c.weeklyNote}</span>`:''}${c.opNotes&&c.opNotes.length?c.opNotes.map(n=>`<span class="op-tag">${n}</span>`).join(''):''}</th>`:`<th>—</th>`).join('')}<th>Weekly</th><th class="zs-ot-col">OT</th></tr>
+            <tr class="zs-notes-row"><th class="zs-name-col" style="text-align:left;">Notes</th>${cols.map((c,ci)=>c.valid?`<th>${(data.customDayNotes&&data.customDayNotes[ci])?`<span class="note-readonly">${data.customDayNotes[ci]}</span>`:''}</th>`:`<th></th>`).join('')}<th></th><th class="zs-ot-col"></th></tr>
+            </thead>
+            <tbody>`;
+        [...rRows].sort((a,b)=>{
+          const ra=(rRoster.find(s=>s.id===a.staffId)||{}).role||'NONE';
+          const rb=(rRoster.find(s=>s.id===b.staffId)||{}).role||'NONE';
+          return ROLE_ORDER[ra]-ROLE_ORDER[rb];
+        }).forEach(row=>{
+          const staff = rRoster.find(s=>s.id===row.staffId);
+          const w2 = rowWeeklyFor(rRoster, row, data.otHours, cols);
+          html += `<tr><td class="zs-name-col">${staff?staff.name:'(unassigned)'}<span class="role-tag">${staff?roleLabel(staff.role):''}</span></td>`;
+          cols.forEach((c,di)=>{
+            if(!c.valid){ html += `<td>—</td>`; return; }
+            html += `<td class="zs-readonly-cell">${shiftDisplayLabel(row.shifts[di], staff)}</td>`;
+          });
+          html += `<td class="zs-row-total">${w2.paid.toFixed(1)}h<br>RM ${fmt(w2.cost)}</td>`;
+          html += `<td class="zs-ot-col">${w2.otHours>0?`<span class="zs-ot-badge">${otLabel(w2.otHours)}</span><span class="zs-ot-cost">RM ${fmt(w2.otCost)}</span>`:`<span class="zs-ot-badge zero">0</span>`}</td>`;
+          html += `</tr>`;
+        });
+        html += `</tbody></table></div></div>`;
+      });
+
+      html += `</div></div>`;
+    });
+    return html;
+  }
+
+  function otLabel(h){
+    if(h<=0) return '0';
+    if(h===1) return '1H';
+    return h.toFixed(1).replace(/\.0$/,'') + 'H';
+  }
+
+  function render(){
+    try {
+      renderInner();
+    } catch(err){
+      root.innerHTML = `<div style="padding:24px;font-family:monospace;background:#fbe9e9;color:#c23b3b;border-radius:10px;white-space:pre-wrap;">
+        <b>Something broke while rendering the schedule.</b>
+        This is a bug — please copy this message back to me so I can fix it:
+        ${err && err.message ? err.message : err}
+        ${err && err.stack ? '\n\n' + err.stack : ''}
+      </div>`;
+      console.error(err);
+    }
+  }
+
+  function renderInner(){
+    const columns = getColumns();
+    const totalCost = totalWeeklyCost();
+    const cap = targets.weeklyCap;
+    const overHardCap = totalCost > 3000;
+    const overWorkingCap = totalCost > cap && !overHardCap;
+    let barColor = 'var(--green)';
+    if(overHardCap) barColor = 'var(--red)'; else if(overWorkingCap) barColor = 'var(--amber)';
+    const pct = cap>0 ? (totalCost/cap*100) : 0;
+
+    const monthlyProjected = totalCost * 4.345;
+    const sales = weeklyActualSales();
+    const salesEntered = anyDailySalesEntered();
+    const labourPct = (salesEntered && sales>0) ? (totalCost/sales*100) : null;
+    let labourPill = '<span class="zs-pill pill-amber">Enter daily sales below</span>';
+    if(labourPct!==null){
+      if(labourPct<=15) labourPill = `<span class="zs-pill pill-green">${labourPct.toFixed(1)}% of sales</span>`;
+      else if(labourPct<=20) labourPill = `<span class="zs-pill pill-amber">${labourPct.toFixed(1)}% of sales</span>`;
+      else labourPill = `<span class="zs-pill pill-red">${labourPct.toFixed(1)}% of sales</span>`;
+    }
+
+    const { violations, notices } = validate(columns);
+    const validCols = columns.filter(c=>c.valid);
+    const rangeLabel = (() => {
+      if(!validCols.length) return '';
+      const first = validCols[0], last = validCols[validCols.length-1];
+      if(first.month === last.month){
+        return `${MONTH_NAMES[first.month-1]} ${ordinal(first.dateNum)} to ${ordinal(last.dateNum)}, ${YEAR}`;
+      }
+      return `${MONTH_NAMES[first.month-1]} ${ordinal(first.dateNum)} to ${MONTH_NAMES[last.month-1]} ${ordinal(last.dateNum)}, ${YEAR}`;
+    })();
+
+    let html = `
+      <div class="zs-header">
+        <div class="zs-header-top">
+          <select class="eyebrow-select" id="zs-state-select">${STATE_LIST.map(s=>`<option value="${s.code}" ${selectedState===s.code?'selected':''}>${s.label}</option>`).join('')}</select>
+          <span class="eyebrow-sep">›</span>
+          <select class="eyebrow-select" id="zs-outlet-select">${(OUTLET_DATA[selectedState]||[]).map(o=>`<option value="${o}" ${selectedOutlet===o?'selected':''}>${o}</option>`).join('')}</select>
+        </div>
+        <h1>Roster, Schedule &amp; Salary Budget Optimizer</h1>
+        <p>Manage who's on the team in the Staff Roster, then build the weekly schedule by picking names from that list. Pay, hours, public holidays and budget checks update automatically.</p>
+      </div>
+      <div class="zs-tabs">
+        <div class="zs-tab ${activeTab==='roster'?'active':''}" data-tab="roster">Staff Roster</div>
+        <div class="zs-tab ${activeTab==='schedule'?'active':''}" data-tab="schedule">Weekly Schedule</div>
+      </div>
+      <div class="zs-cal-controls">
+        <span><label>Month</label><select id="zs-cal-month">${MONTH_NAMES.map((m,i)=>`<option value="${i+1}" ${cal.month===i+1?'selected':''}>${m}</option>`).join('')}</select></span>
+        <span><label>Week</label><select id="zs-cal-week">${Array.from({length:weeksInMonth(cal.month)},(_,i)=>i+1).map(w=>`<option value="${w}" ${cal.week===w?'selected':''}>Week ${w}</option>`).join('')}</select></span>
+        <span class="zs-cal-range">${rangeLabel}</span>
+      </div>
+      <div class="zs-kpis">
+        <div class="zs-kpi">
+          <div class="zs-kpi-row"><span class="mini">Weekly</span></div>
+          <input type="number" id="zs-sales-target-w" value="${targets.weeklySalesTarget}" />
+          <div class="label" style="margin-top:6px;">Monthly</div>
+          <input type="number" id="zs-sales-target-m" value="${targets.monthlySalesTarget}" />
+          <div class="sub">Sales targets</div>
+        </div>
+        <div class="zs-kpi">
+          <div class="zs-kpi-row"><span class="mini">Weekly</span></div>
+          <input type="number" id="zs-cap-w" value="${targets.weeklyCap}" />
+          <div class="label" style="margin-top:6px;">Monthly</div>
+          <input type="number" id="zs-cap-m" value="${targets.monthlyCap}" />
+          <div class="sub">Budget caps (hard max RM3,000/wk)</div>
+        </div>
+        <div class="zs-kpi">
+          <div class="label">Weekly Sales (auto-summed from daily entries)</div>
+          <div class="value">RM ${fmt(weeklyActualSales())}</div>
+          <div class="sub">${labourPill}</div>
+        </div>
+      </div>
+      <div class="zs-kpis" style="grid-template-columns:repeat(2,1fr);">
+        <div class="zs-kpi">
+          <div class="label">Weekly Salary Cost (paid hours + OT)</div>
+          <div class="value" style="color:${overHardCap?'var(--red)':overWorkingCap?'var(--amber)':'var(--green)'}">RM ${fmt(totalCost)}</div>
+          <div class="sub">${pct.toFixed(1)}% of weekly cap ${totalOtCost()>0?`&middot; incl. RM ${fmt(totalOtCost())} OT`:''}</div>
+          <div class="zs-budget-bar" style="margin-top:6px;"><div class="zs-budget-fill" style="width:${Math.min(pct,150)}%; background:${barColor};"></div></div>
+        </div>
+        <div class="zs-kpi">
+          <div class="label">Monthly Projected Salary (&times;4.345 weeks)</div>
+          <div class="value" style="color:${monthlyProjected>targets.monthlyCap?'var(--red)':'var(--ink)'}">RM ${fmt(monthlyProjected)}</div>
+          <div class="sub">vs monthly cap RM ${fmt(targets.monthlyCap)}</div>
+        </div>
+      </div>
+      <div class="zs-kpis" style="grid-template-columns:repeat(7,1fr);">
+        ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d,i)=>`
+        <div class="zs-kpi" style="padding:8px 10px;">
+          <div class="label" style="font-size:9px;">${d} Daily Sales</div>
+          <input type="number" id="zs-daily-${i}" placeholder="0" value="${dailySales[i]!==null&&dailySales[i]!==undefined?dailySales[i]:''}" style="font-size:12px;"/>
+        </div>`).join('')}
+      </div>
+      <div class="zs-body">
+    `;
+
+    if(importConflicts){
+      html += renderImportConflicts();
+    } else if(activeTab==='roster'){
+      html += renderRoster();
+    } else {
+      html += renderSchedule(columns, violations, notices, totalCost);
+    }
+
+    html += `</div>`;
+    html += `<div class="zs-footer-credit"><b>Intellectual Property of Amani Nabihan (ZUS22286)</b> &bull; Powered by Claude</div>`;
+    root.innerHTML = html;
+    attachListeners();
+  }
+
+  function renderImportConflicts(){
+    const { list, autoImported, importRoster } = importConflicts;
+    let html = `
+      <div class="zs-section-title">Import Review \u2014 Straits City Excel Data</div>
+      <p class="zs-note" style="margin-top:-6px;">
+        ${autoImported.length} week(s) imported automatically with no conflicts.
+        ${list.length} week(s) already have data saved in this app \u2014 pick which version to keep for each.
+      </p>
+    `;
+    list.forEach(({ key, wk, incomingRows, weekSnapshot, existingSnapshot }) => {
+      const cols = getColumnsFor(wk.month, wk.week);
+      const existingRoster = existingSnapshot.rosterSnapshot || roster;
+      const existingCost = totalWeeklyCostFor(existingRoster, existingSnapshot.scheduleRows);
+      const incomingCost = totalWeeklyCostFor(weekSnapshot, incomingRows);
+      const renderMiniTable = (rows, rosterForRows) => {
+        let t = `<table class="zs-table zs-readonly" style="min-width:0;"><thead><tr class="zs-days"><th class="zs-name-col">Staff</th>${cols.map(c=>c.valid?`<th>${c.weekday} ${ordinal(c.dateNum)}</th>`:`<th>\u2014</th>`).join('')}</tr></thead><tbody>`;
+        rows.forEach(row=>{
+          const staff = rosterForRows.find(s=>s.id===row.staffId);
+          t += `<tr><td class="zs-name-col">${staff?staff.name:'(unassigned)'}</td>`;
+          cols.forEach((c,di)=>{
+            if(!c.valid){ t += `<td>\u2014</td>`; return; }
+            t += `<td class="zs-readonly-cell">${shiftDisplayLabel(row.shifts[di], staff)}</td>`;
+          });
+          t += `</tr>`;
+        });
+        t += `</tbody></table>`;
+        return t;
+      };
+      html += `<div class="zs-card" style="margin-bottom:18px;">
+        <h3>${wk.label} <span style="font-weight:400;color:var(--ink-soft);">(${MONTH_NAMES[wk.month-1]}, Week ${wk.week})</span></h3>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:10px;">
+          <div>
+            <div style="font-weight:700; font-size:12px; color:var(--navy); margin-bottom:6px;">Currently in app &middot; RM ${fmt(existingCost)}</div>
+            <div class="zs-table-wrap">${renderMiniTable(existingSnapshot.scheduleRows, existingRoster)}</div>
+            <button class="zs-mini-btn ghost" style="margin-top:8px;" data-keep-existing="${key}">Keep this version</button>
+          </div>
+          <div>
+            <div style="font-weight:700; font-size:12px; color:var(--green); margin-bottom:6px;">From Excel file &middot; RM ${fmt(incomingCost)}</div>
+            <div class="zs-table-wrap">${renderMiniTable(incomingRows, weekSnapshot)}</div>
+            <button class="zs-mini-btn" style="margin-top:8px;background:var(--green);" data-use-imported="${key}">Use this version instead</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    return html;
+  }
+
+  function renderRoster(){
+    let html = `
+      <div class="zs-section-title">Staff Roster</div>
+      <p class="zs-note" style="margin-top:-6px;">Add new hires here, mark someone inactive when they resign, or change their role to reflect a promotion/demotion &mdash; the schedule tab picks names straight from this list and recalculates pay automatically.</p>
+      <div class="zs-roster-wrap">
+      <table class="zs-roster">
+        <thead><tr>
+          <th style="min-width:120px;">Name</th>
+          <th>Role</th>
+          <th>CS Position</th>
+          <th>Status</th>
+          <th>Std. Hours/Day</th>
+          <th>Rate (RM/hr)</th>
+          <th style="min-width:140px;">Notes</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+    `;
+    roster.forEach(s => {
+      html += `<tr>
+        <td class="name-cell"><input type="text" class="rs-field" data-id="${s.id}" data-field="name" value="${s.name}" placeholder="Staff name"/></td>
+        <td><select class="rs-field" data-id="${s.id}" data-field="role">
+          <option value="OS" ${s.role==='OS'?'selected':''}>OS</option>
+          <option value="FT" ${s.role==='FT'?'selected':''}>FT</option>
+          <option value="PT" ${s.role==='PT'?'selected':''}>PT</option>
+          <option value="CS" ${s.role==='CS'?'selected':''}>CS (Cover Staff)</option>
+        </select></td>
+        <td>${s.role==='CS' ? `<select class="rs-field" data-id="${s.id}" data-field="csPosition">
+          <option value="FT" ${(s.csPosition||'FT')==='FT'?'selected':''}>FT (Full Timer rate)</option>
+          <option value="PT" ${s.csPosition==='PT'?'selected':''}>PT (Part Timer rate)</option>
+        </select>` : `<span style="color:#bbb;font-size:10px;">N/A</span>`}</td>
+        <td><select class="rs-field" data-id="${s.id}" data-field="status">
+          <option value="active" ${s.status==='active'?'selected':''}>Active</option>
+          <option value="inactive" ${s.status==='inactive'?'selected':''}>Inactive / Resigned</option>
+        </select></td>
+        <td><input type="number" step="0.5" class="rs-field" data-id="${s.id}" data-field="standardHours" value="${s.standardHours}"/></td>
+        <td><input type="number" step="0.01" class="rs-field" data-id="${s.id}" data-field="rate" value="${s.rate}"/></td>
+        <td><input type="text" class="rs-field" data-id="${s.id}" data-field="note" value="${s.note||''}" placeholder="e.g. promoted 1 Jul"/></td>
+        <td><button class="zs-mini-btn danger" data-remove-staff="${s.id}">Remove</button></td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>
+      <div class="zs-actions-row">
+        <button class="zs-mini-btn" id="zs-add-staff">+ Add Staff</button>
+      </div>
+      <p class="zs-note">Changing <b>Role</b> resets Rate and Standard Hours to that role's default (RM10.41/8.5h OS, RM8.15/8.5h FT, RM8.80/8.5h PT). Set someone to <b>Inactive</b> when they resign; they drop out of the schedule picker but past records stay intact.<br><br><b>Rules apply by role only. No exceptions for any individual staff.</b><br>OS/FT: every working shift must be 8.5h (red violation if under). Off days are paid (8.5h counted). Break is paid.<br>PT: shifts under 4h = red violation. Under 31.5h/week = amber notice for all PT staff. Off days unpaid. Break deducted (1h if shift 5h+, 30min if under 5h).<br>CS: follows their FT or PT position for all shift and pay rules. Off days unpaid.<br><br><b>OFFDAY (R):</b> requested day off, always unpaid regardless of role. <b>AL:</b> annual leave, paid for OS/FT (8.5h counted), unpaid for PT/CS.</p>
+    `;
+    return html;
+  }
+
+  function hhSelect(selected, rowId, day, field){
+    let opts = `<option value="" ${selected===''?'selected':''}>--</option>`;
+    for(let h=0;h<24;h++){
+      const v=h.toString().padStart(2,'0');
+      const ampm = h<12 ? 'AM':'PM';
+      let h12 = h%12; if(h12===0) h12=12;
+      opts+=`<option value="${v}" ${selected===v?'selected':''}>${h12} ${ampm}</option>`;
+    }
+    return `<select class="tp-hh" data-row="${rowId}" data-day="${day}" data-field="${field}">${opts}</select>`;
+  }
+  function mmSelect(selected, rowId, day, field){
+    let opts = `<option value="" ${selected===''?'selected':''}>--</option>`;
+    ['00','30'].forEach(m=>{ opts+=`<option value="${m}" ${selected===m?'selected':''}>:${m}</option>`; });
+    return `<select class="tp-mm" data-row="${rowId}" data-day="${day}" data-field="${field}">${opts}</select>`;
+  }
+  function timePickHtml(rowId, day, hhField, hhVal, mmField, mmVal){
+    return `<div class="time-pick">${hhSelect(hhVal, rowId, day, hhField)}<span class="tp-colon"></span>${mmSelect(mmVal, rowId, day, mmField)}</div>`;
+  }
+
+  function otSelectHtml(staffId, current){
+    const opts = OT_STEPS.map(v => `<option value="${v}" ${current===v?'selected':''}>${v===0?'0':otLabel(v)}</option>`).join('');
+    return `<select class="ot-select" data-staff="${staffId}">${opts}</select>`;
+  }
+
+  function renderSchedule(columns, violations, notices, totalCost){
+    let html = `
+      <div class="zs-shift-key">
+        <span><b>M</b> Morning 08:30 to 17:00</span>
+        <span><b>C</b> Closing 14:00 to 22:30</span>
+        <span><b>MID</b> starts 10:00/11:00/12:00, ends after the staff's standard daily hours</span>
+        <span><b>PTS1</b> 18:30 to 22:30 (4h)</span>
+        <span><b>PTS2</b> 08:30 to 14:00 (5.5h)</span>
+        <span><b>CUSTOM</b> pick any hour (AM/PM) + :00/:30, blank until you set it — minimum 4h</span>
+        <span><b>COVER</b> covering another outlet, or a guest staff covering ours — same hour + :00/:30 picker</span>
+        <span><b>OFFDAY (R)</b> requested day off — paid for OS/FT, unpaid for PT/CS</span>
+        <span><b>AL</b> annual leave, unpaid — planning indicator only</span>
+        <span><b>BL</b> Birthday Leave — OS/FT only, paid 8.5h same as off day (Teal)</span>
+        <span><b>MC</b> Medical Certificate Leave — always unpaid (Red)</span>
+        <span><b>OFF</b> OS/FT: paid off day (8.5h counted). PT/CS: unpaid</span>
+        <span><b>COVER OUT</b> Steel Blue = this staff covers another outlet, not charged to our budget</span>
+        <span><b>COVER IN</b> Deep Sea Blue = external staff covering us, charged to our budget</span>
+        <span><b>OT</b> weekly overtime indicator (right edge) — 1.5&times; hourly rate, counted in budget</span>
+      </div>
+      <div class="zs-section-title">Weekly Schedule</div>
+      <div class="zs-table-wrap">
+      <table class="zs-table">
+        <colgroup>
+          <col style="width:150px;">
+          <col><col><col><col><col><col><col>
+          <col style="width:90px;">
+          <col style="width:76px;">
+          <col style="width:36px;">
+        </colgroup>
+        <thead>
+          <tr class="zs-days"><th class="zs-name-col">Staff</th>${columns.map((c,ci)=>{
+            if(!c.valid) return `<th>—</th>`;
+            return `<th${c.inSelectedMonth===false?' style="opacity:0.55;"':''}>${c.weekday} ${ordinal(c.dateNum)}${c.inSelectedMonth===false?` <span style="font-size:8px;">(${MONTH_NAMES[c.month-1].slice(0,3)})</span>`:''}${c.holiday?`<span class="ph-tag">${c.holiday}</span>`:''}${c.weeklyNote?`<span class="zus-day-tag">${c.weeklyNote}</span>`:''}${c.opNotes&&c.opNotes.length?c.opNotes.map(n=>`<span class="op-tag">${n}</span>`).join(''):''}</th>`;
+          }).join('')}<th>Weekly</th><th class="zs-ot-col">OT</th><th class="zs-remove-col"></th></tr>
+          <tr class="zs-notes-row"><th class="zs-name-col" style="text-align:left;">Notes</th>${columns.map((c,ci)=>{
+            if(!c.valid) return `<th></th>`;
+            return `<th><input type="text" class="custom-note-input" data-day-note="${ci}" placeholder="Add note..." value="${(customDayNotes[ci]||'').replace(/"/g,'&quot;')}"/></th>`;
+          }).join('')}<th></th><th class="zs-ot-col"></th><th class="zs-remove-col"></th></tr>
+        </thead>
+        <tbody>
+    `;
+
+    const displayRows = [...scheduleRows].sort((a,b)=>{
+      const ra = (getStaff(a.staffId)||{}).role || 'NONE';
+      const rb = (getStaff(b.staffId)||{}).role || 'NONE';
+      return ROLE_ORDER[ra]-ROLE_ORDER[rb];
+    });
+    let lastGroup = null;
+    displayRows.forEach((row) => {
+      const staff = getStaff(row.staffId);
+      const groupKey = staff ? staff.role : 'NONE';
+      if(groupKey !== lastGroup){
+        html += `<tr class="zs-section-break"><td colspan="${columns.length+4}">${ROLE_GROUP_LABEL[groupKey]}</td></tr>`;
+        lastGroup = groupKey;
+      }
+      const w = rowWeekly(row, columns);
+      html += `<tr class="zs-data-row"><td class="zs-name-col">
+        <select class="zs-row-staff" data-row="${row.id}">
+          <option value="" ${!row.staffId?'selected':''}>— Select staff —</option>
+          ${roster.map(s=>`<option value="${s.id}" ${row.staffId===s.id?'selected':''}>${s.name}${s.status==='inactive'?' (inactive)':''}</option>`).join('')}
+        </select>
+        ${staff?`<span class="role-tag">${roleLabel(staff.role)}${staff.role==='CS'?' ('+( staff.csPosition||'FT')+')':''} &middot; RM${staff.rate.toFixed(2)}/hr</span>`:'<span class="role-tag">unassigned</span>'}
+      </td>`;
+      columns.forEach((col, di) => {
+        if(!col.valid){ html += `<td><div class="zs-cell invalid">—</div></td>`; return; }
+        const sh = row.shifts[di];
+        const effStaff = getEffectiveStaffForDay(staff, col);
+        const isBorrowedRate = staff && effStaff && effStaff.role !== staff.role;
+        const off = sh.type==='OFF';
+        const offr = sh.type==='OFFDAYR';
+        const al = sh.type==='AL';
+        const bl = sh.type==='BL';
+        const mc = sh.type==='MC';
+        const h = shiftHours(sh, effStaff);
+        const isPaidOff = off && (effStaff && (effStaff.role==='OS'||effStaff.role==='FT'));
+        const isOffrPaid = offr && (effStaff && (effStaff.role==='OS'||effStaff.role==='FT'));
+        const isAlPaid = al && (effStaff && (effStaff.role==='OS'||effStaff.role==='FT'));
+        const isBlPaid = bl && (effStaff && (effStaff.role==='OS'||effStaff.role==='FT'));
+        const isCoverOut = sh.type==='COVER' && sh.coverDirection==='out';
+        const isCoverIn = sh.type==='COVER' && sh.coverDirection==='in';
+        let cellClass = '';
+        if(off) cellClass='off';
+        else if(offr) cellClass='offr';
+        else if(al && !isAlPaid) cellClass='al';
+        else if(al && isAlPaid) cellClass='al-paid';
+        else if(bl) cellClass='bl';
+        else if(mc) cellClass='mc';
+        else if(isCoverOut) cellClass='cover-out';
+        else if(isCoverIn) cellClass='cover-in';
+        html += `<td><div class="zs-cell ${cellClass}">
+          ${isBorrowedRate ? `<span class="borrowed-rate-tag">${effStaff.role} rate</span>` : ''}
+          <select class="shift-type" data-row="${row.id}" data-day="${di}">
+            ${['OFF','OFFDAYR','AL','BL','MC','M','C','MID','PTS1','PTS2','CUSTOM','COVER'].map(opt=>`<option value="${opt}" ${sh.type===opt?'selected':''}>${opt==='OFFDAYR'?'OFFDAY (R)':opt==='AL'?'ANNUAL LEAVE (AL)':opt==='BL'?'BIRTHDAY LEAVE (BL)':opt==='MC'?'MEDICAL CERT (MC)':opt==='PTS1'?'PT SPECIALIZED (PTS1)':opt==='PTS2'?'PT SPECIALIZED (PTS2)':opt}</option>`).join('')}
+          </select>
+          ${offr ? `<span class="time-label">requested off${isOffrPaid?'':' (unpaid)'}</span>` : ''}
+          ${al ? `<span class="time-label">annual leave</span>` : ''}
+          ${(isPaidOff) ? `<div class="hr-badges"><span class="hr-badge paid">${h.paid.toFixed(1)}h paid</span></div>` : ''}
+          ${(isOffrPaid) ? `<div class="hr-badges"><span class="hr-badge paid">${h.paid.toFixed(1)}h paid</span></div>` : ''}
+          ${(isAlPaid) ? `<div class="hr-badges"><span class="hr-badge paid">${h.paid.toFixed(1)}h paid</span></div>` : ''}
+          ${(isBlPaid) ? `<div class="hr-badges"><span class="hr-badge paid">${h.paid.toFixed(1)}h paid</span></div>` : ''}
+          ${(mc) ? `<span class="time-label" style="color:white;">unpaid</span>` : ''}
+          ${sh.type==='MID' ? `<select class="mid-start" data-row="${row.id}" data-day="${di}">
+              ${MID_STARTS.map(ms=>`<option value="${ms}" ${sh.midStart===ms?'selected':''}>${minToLabel(ms)}</option>`).join('')}
+            </select>` : ''}
+          ${(sh.type==='CUSTOM') ? timePickHtml(row.id, di, 'csHH', sh.csHH, 'csMM', sh.csMM) + timePickHtml(row.id, di, 'ceHH', sh.ceHH, 'ceMM', sh.ceMM) : ''}
+          ${(sh.type==='COVER') ? `
+              <select class="cover-dir" data-row="${row.id}" data-day="${di}">
+                <option value="out" ${sh.coverDirection==='out'?'selected':''}>Covering out</option>
+                <option value="in" ${sh.coverDirection==='in'?'selected':''}>Covering in</option>
+              </select>
+              <input type="text" class="cover-note" placeholder="Outlet / staff" data-row="${row.id}" data-day="${di}" value="${sh.coverNote||''}"/>
+              ${timePickHtml(row.id, di, 'csHH', sh.csHH, 'csMM', sh.csMM)}${timePickHtml(row.id, di, 'ceHH', sh.ceHH, 'ceMM', sh.ceMM)}` : ''}
+          ${!off && h.gross>0 ? `<span class="time-label">${h.label}</span>
+            <div class="hr-badges">
+              ${(() => {
+                if(effStaff && h.paid!==h.gross){
+                  return `<span class="hr-badge">${h.gross.toFixed(1)}h</span><span class="hr-badge paid">paid ${h.paid.toFixed(1)}h</span>`;
+                }
+                const unmet = effStaff && (effStaff.role==='OS'||effStaff.role==='FT') && h.gross>0 && h.gross<8.5;
+                return `<span class="hr-badge ${unmet?'unmet':'paid'}">${h.paid.toFixed(1)}h</span>`;
+              })()}
+            </div>` : ''}
+          ${!off && h.gross===0 && (sh.type==='CUSTOM'||sh.type==='COVER') ? `<span class="time-label">set time</span>` : ''}
+        </div></td>`;
+      });
+      html += `<td class="zs-row-total">${w.paid.toFixed(1)}h<br>RM ${fmt(w.cost)}${w.gross!==w.paid?`<span class="gross-note">${w.gross.toFixed(1)}h worked</span>`:''}</td>`;
+      html += `<td class="zs-ot-col">${row.staffId ? otSelectHtml(row.staffId, w.otHours) : `<span class="zs-ot-badge zero">—</span>`}${w.otHours>0?`<span class="zs-ot-cost">RM ${fmt(w.otCost)}</span>`:''}</td>`;
+      html += `<td class="zs-remove-col"><button class="zs-mini-btn danger" data-remove-row="${row.id}">&times;</button></td></tr>`;
+    });
+    html += `</tbody><tfoot>`;
+    html += `<tr class="headcount"><td class="zs-name-col">Headcount (M/MID/C/COV/PTS)</td>${columns.map((col,di)=>{
+      if(!col.valid) return `<td>—</td>`;
+      const h = headcountForDay(di);
+      return `<td>${h.m}M ${h.mid}MID ${h.c}C ${h.cov}COV ${h.pts}PTS</td>`;
+    }).join('')}<td colspan="3"></td></tr>`;
+    html += `<tr><td class="zs-name-col">Daily Salary Cost (RM)</td>${columns.map((col,di)=>{
+      if(!col.valid) return `<td>—</td>`;
+      let dayCost=0;
+      scheduleRows.forEach(r=>{ const staff=getStaff(r.staffId); const effStaff=getEffectiveStaffForDay(staff,col); dayCost += shiftHours(r.shifts[di], effStaff).paid * (effStaff?effStaff.rate:0); });
+      return `<td>${fmt(dayCost)}</td>`;
+    }).join('')}<td colspan="3">RM ${fmt(totalCost)}${totalOtCost()>0?` <span style="font-weight:400;font-size:9.5px;">(incl. RM ${fmt(totalOtCost())} OT)</span>`:''}</td></tr>`;
+    ['OS','FT','PT'].forEach(role=>{
+      const sub = roleSubtotal(role);
+      html += `<tr class="role-sub"><td colspan="${columns.length+4}">${roleLabel(role)} subtotal: ${sub.paid.toFixed(1)}h paid &middot; RM ${fmt(sub.cost)}</td></tr>`;
+    });
+    html += `</tfoot></table></div>
+      <div class="zs-actions-row">
+        <button class="zs-mini-btn" id="zs-add-row">+ Add Row</button>
+        <button class="zs-mini-btn ghost" id="zs-reset-btn">Reset the Week</button>
+        <button class="zs-mini-btn ghost" id="zs-clear-storage-btn">Clear all saved weeks</button>
+        <button class="zs-mini-btn ghost" id="zs-export-btn">Export file (.csv)</button>
+        <button class="zs-mini-btn ghost" id="zs-import-btn">Import file (.csv)</button>
+        <button class="zs-mini-btn" id="zs-import-real-btn" style="background:var(--green);">Import Excel Data</button>
+        <input type="file" id="zs-import-input" accept=".csv,.xlsx,.xls,text/csv" style="display:none"/>
+      </div>
+    `;
+
+    html += `<div class="zs-footer-grid">
+      <div class="zs-card">
+        <h3>Schedule checks</h3>
+        ${violations.length ? `<ul class="warn-list">${violations.map(w=>`<li>${w}</li>`).join('')}</ul>` : `<p class="ok-msg">No violations.</p>`}
+        ${notices.length ? `<ul class="notice-list" style="margin-top:8px;">${notices.map(n=>`<li>${n}</li>`).join('')}</ul>` : ''}
+      </div>
+      <div class="zs-card">
+        <h3>Budget status</h3>
+        <ul>
+          <li>Weekly salary cost (paid hours): RM ${fmt(totalCost - totalOtCost())}</li>
+          <li>Overtime paid: RM ${fmt(totalOtCost())}</li>
+          <li><b>Total (paid + OT): RM ${fmt(totalCost)}</b></li>
+          <li>Working target: RM ${fmt(targets.weeklyCap)}</li>
+          <li>Hard ceiling: RM 3,000.00</li>
+        </ul>
+        ${totalCost>3000 ? `<p style="color:var(--red); font-weight:700; font-size:12px; margin-top:6px;">Exceeds the hard RM3,000 ceiling — reduce hours.</p>` : totalCost>targets.weeklyCap ? `<p style="color:var(--amber); font-size:12px; margin-top:6px;">Above your working target but within the RM3,000 cap.</p>` : `<p style="color:var(--green); font-size:12px; margin-top:6px;">Within your working budget.</p>`}
+      </div>
+    </div>`;
+    html += renderHistory();
+    return html;
+  }
+
+  function attachListeners(){
+    root.querySelectorAll('.zs-tab').forEach(tab=>{
+      tab.addEventListener('click', e=>{ activeTab = e.target.dataset.tab; render(); });
+    });
+    const stateSel = document.getElementById('zs-state-select');
+    if(stateSel) stateSel.addEventListener('change', e=>{
+      saveCurrentStoreData();
+      selectedState = e.target.value;
+      selectedOutlet = (OUTLET_DATA[selectedState]||[])[0] || '';
+      localStorage.setItem('zus_state', selectedState);
+      localStorage.setItem('zus_outlet', selectedOutlet);
+      loadStoreData(storeKey());
+      render();
+    });
+    const outletSel = document.getElementById('zs-outlet-select');
+    if(outletSel) outletSel.addEventListener('change', e=>{
+      saveCurrentStoreData();
+      selectedOutlet = e.target.value;
+      localStorage.setItem('zus_state', selectedState);
+      localStorage.setItem('zus_outlet', selectedOutlet);
+      loadStoreData(storeKey());
+      render();
+    });
+    const calMonth = document.getElementById('zs-cal-month');
+    if(calMonth) calMonth.addEventListener('change', e=>{ switchWeek(parseInt(e.target.value), null); });
+    const calWeek = document.getElementById('zs-cal-week');
+    if(calWeek) calWeek.addEventListener('change', e=>{ switchWeek(null, parseInt(e.target.value)); });
+
+    const bind = (id, field) => {
+      const el = document.getElementById(id);
+      if(el){
+        el.addEventListener('blur', e=>{ targets[field] = e.target.value===''?'':parseFloat(e.target.value); persistCurrent(); });
+        el.addEventListener('change', e=>{ targets[field] = e.target.value===''?'':parseFloat(e.target.value); render(); });
+      }
+    };
+    bind('zs-sales-target-w','weeklySalesTarget');
+    bind('zs-sales-target-m','monthlySalesTarget');
+    bind('zs-cap-w','weeklyCap');
+    bind('zs-cap-m','monthlyCap');
+    [0,1,2,3,4,5,6].forEach(i=>{
+      const el = document.getElementById('zs-daily-'+i);
+      if(el){
+        el.addEventListener('blur', e=>{
+          dailySales[i] = e.target.value===''?null:parseFloat(e.target.value);
+          persistCurrent();
+          render();
+        });
+        el.addEventListener('change', e=>{
+          dailySales[i] = e.target.value===''?null:parseFloat(e.target.value);
+          persistCurrent();
+          render();
+        });
+      }
+    });
+    root.querySelectorAll('.custom-note-input').forEach(el=>{
+      el.addEventListener('blur', e=>{
+        const idx = parseInt(e.target.dataset.dayNote);
+        customDayNotes[idx] = e.target.value;
+        persistCurrent();
+      });
+    });
+
+    if(activeTab==='roster'){
+      root.querySelectorAll('.rs-field').forEach(el=>{
+        const evt = (el.type==='checkbox' || el.type==='select-one') ? 'change' : 'blur';
+        el.addEventListener(evt, e=>{
+          const id = e.target.dataset.id, field = e.target.dataset.field;
+          const staff = roster.find(s=>s.id===id); // always edit the master/current roster, never a past week's frozen snapshot
+          if(!staff) return;
+          if(field==='standardHours' || field==='rate'){ staff[field] = e.target.value===''?0:parseFloat(e.target.value); }
+          else if(field==='role'){
+            staff.role = e.target.value;
+            const d = ROLE_DEFAULTS[staff.role];
+            staff.rate = d.rate; staff.standardHours = d.standardHours;
+            if(staff.role==='PT') staff.maxHours = d.maxHours;
+            if(staff.role==='CS'){ staff.csPosition = staff.csPosition||'FT'; staff.rate = ROLE_DEFAULTS['FT'].rate; }
+          }
+          else if(field==='csPosition'){
+            staff.csPosition = e.target.value;
+            staff.rate = e.target.value==='PT' ? ROLE_DEFAULTS['PT'].rate : ROLE_DEFAULTS['FT'].rate;
+            staff.standardHours = ROLE_DEFAULTS[e.target.value].standardHours;
+          }
+          else { staff[field] = e.target.value; }
+          render();
+        });
+      });
+      const addBtn = document.getElementById('zs-add-staff');
+      if(addBtn) addBtn.addEventListener('click', ()=>{
+        const id = uid('st');
+        roster.push({ id, name:'New Staff', role:'PT', status:'active', standardHours:8.5, rate:8.80, maxHours:8.5, note:'' });
+        scheduleRows.push({ id:uid('row'), staffId:id, shifts:[0,1,2,3,4,5,6].map(()=>blankShift()) });
+        render();
+      });
+      root.querySelectorAll('[data-remove-staff]').forEach(btn=>{
+        btn.addEventListener('click', e=>{
+          const id = e.target.dataset.removeStaff;
+          roster = roster.filter(s=>s.id!==id);
+          scheduleRows.forEach(r=>{ if(r.staffId===id) r.staffId=null; });
+          delete otHours[id];
+          render();
+        });
+      });
+    } else {
+      root.querySelectorAll('.zs-row-staff').forEach(sel=>{
+        sel.addEventListener('change', e=>{
+          const row = scheduleRows.find(r=>r.id===e.target.dataset.row);
+          row.staffId = e.target.value || null;
+          render();
+        });
+      });
+      root.querySelectorAll('.shift-type').forEach(sel=>{
+        sel.addEventListener('change', e=>{
+          const row = scheduleRows.find(r=>r.id===e.target.dataset.row);
+          const di = parseInt(e.target.dataset.day);
+          row.shifts[di] = blankShift();
+          row.shifts[di].type = e.target.value;
+          persistCurrent();
+          render();
+        });
+      });
+      root.querySelectorAll('.mid-start').forEach(sel=>{
+        sel.addEventListener('change', e=>{
+          const row = scheduleRows.find(r=>r.id===e.target.dataset.row);
+          row.shifts[parseInt(e.target.dataset.day)].midStart = parseInt(e.target.value);
+          persistCurrent();
+          render();
+        });
+      });
+      root.querySelectorAll('.time-pick select').forEach(sel=>{
+        sel.addEventListener('change', e=>{
+          const row = scheduleRows.find(r=>r.id===e.target.dataset.row);
+          if(!row) return;
+          const di = parseInt(e.target.dataset.day), field = e.target.dataset.field;
+          row.shifts[di][field] = e.target.value;
+          render();
+        });
+      });
+      root.querySelectorAll('.cover-dir').forEach(sel=>{
+        sel.addEventListener('change', e=>{
+          const row = scheduleRows.find(r=>r.id===e.target.dataset.row);
+          row.shifts[parseInt(e.target.dataset.day)].coverDirection = e.target.value;
+          render();
+        });
+      });
+      root.querySelectorAll('.cover-note').forEach(inp=>{
+        inp.addEventListener('input', e=>{
+          const row = scheduleRows.find(r=>r.id===e.target.dataset.row);
+          row.shifts[parseInt(e.target.dataset.day)].coverNote = e.target.value;
+        });
+      });
+      root.querySelectorAll('.ot-select').forEach(sel=>{
+        sel.addEventListener('change', e=>{
+          const staffId = e.target.dataset.staff;
+          otHours[staffId] = parseFloat(e.target.value) || 0;
+          render();
+        });
+      });
+      const addRowBtn = document.getElementById('zs-add-row');
+      if(addRowBtn) addRowBtn.addEventListener('click', ()=>{
+        scheduleRows.push({ id:uid('row'), staffId:null, shifts:[0,1,2,3,4,5,6].map(()=>blankShift()) });
+        render();
+      });
+      root.querySelectorAll('[data-remove-row]').forEach(btn=>{
+        btn.addEventListener('click', e=>{
+          scheduleRows = scheduleRows.filter(r=>r.id!==e.target.dataset.removeRow);
+          render();
+        });
+      });
+      const resetBtn = document.getElementById('zs-reset-btn');
+      if(resetBtn) resetBtn.addEventListener('click', ()=>{
+        if(confirm('Reset the Weekly Schedule for this week? All shifts will be cleared back to OFF. Staff Roster, targets, and saved history are not affected.')){
+          // Only clear this week's shifts — keep the same staff rows, roster, targets, and history intact
+          scheduleRows = scheduleRows.map(r => ({ id: uid('row'), staffId: r.staffId, shifts: [0,1,2,3,4,5,6].map(()=>blankShift()) }));
+          persistCurrent();
+          render();
+        }
+      });
+      const clearBtn = document.getElementById('zs-clear-storage-btn');
+      if(clearBtn) clearBtn.addEventListener('click', ()=>{
+        if(confirm('This permanently deletes every saved week (current and history) from this browser. Continue?')){
+          try {
+            localStorage.removeItem('zus_weeks'); localStorage.removeItem('zus_roster');
+            localStorage.removeItem('zus_targets'); localStorage.removeItem('zus_cal');
+            localStorage.removeItem('zus_state'); localStorage.removeItem('zus_outlet');
+            localStorage.removeItem('zus_all_stores');
+          } catch(e){}
+          location.reload();
+        }
+      });
+      const exportBtn = document.getElementById('zs-export-btn');
+      if(exportBtn) exportBtn.addEventListener('click', ()=>{
+        persistCurrent();
+        // Build CSV: metadata block, then roster block, then each week block
+        const esc = v => '"' + String(v===null||v===undefined?'':v).replace(/"/g,'""') + '"';
+        const rows = [];
+        rows.push(['ZUS COFFEE PENANG - SCHEDULE EXPORT']);
+        rows.push(['Exported', new Date().toLocaleString()]);
+        rows.push([]);
+        rows.push(['== ROSTER ==']);
+        rows.push(['ID','Name','Role','Status','Std Hours','Rate (RM/hr)','Notes']);
+        roster.forEach(s => rows.push([s.id,s.name,s.role,s.status,s.standardHours,s.rate,s.note||'']));
+        rows.push([]);
+        rows.push(['== TARGETS ==']);
+        rows.push(['Weekly Sales Target','Monthly Sales Target','Weekly Budget Cap','Monthly Budget Cap']);
+        rows.push([targets.weeklySalesTarget,targets.monthlySalesTarget,targets.weeklyCap,targets.monthlyCap]);
+        rows.push([]);
+        // Weeks
+        Object.entries(weekArchive).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([key,data])=>{
+          const [m,w] = key.split('-').map(Number);
+          const cols = getColumnsFor(m,w);
+          rows.push([`== WEEK ${MONTH_NAMES[m-1].toUpperCase()} WEEK ${w} ==`]);
+          rows.push(['Staff ID','Name','Role','Mon','Tue','Wed','Thu','Fri','Sat','Sun','Paid Hrs','OT Hrs','Weekly Pay']);
+          const rRoster = data.rosterSnapshot || roster;
+          data.scheduleRows.forEach(row=>{
+            const staff = rRoster.find(s=>s.id===row.staffId);
+            const w2 = rowWeeklyFor(rRoster,row,data.otHours,cols);
+            rows.push([
+              row.staffId||'',
+              staff?staff.name:'(unassigned)',
+              staff?staff.role:'',
+              ...row.shifts.map(sh=>sh.type),
+              w2.paid.toFixed(1),
+              w2.otHours.toFixed(1),
+              w2.cost.toFixed(2)
+            ]);
+          });
+          rows.push([]);
+        });
+        const csv = rows.map(r=>r.map(esc).join(',')).join('\n');
+        const blob = new Blob([csv], {type:'text/csv'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `zus_schedule_${new Date().toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+      const importRealBtn = document.getElementById('zs-import-real-btn');
+      if(importRealBtn) importRealBtn.addEventListener('click', ()=>{
+        if(confirm('Import the 6 verified weeks from your real Straits City Excel data (June W1-4, July W1-2)? Weeks with no existing data will be added automatically. Weeks that already have data will show a comparison for you to choose.')){
+          startImportReview();
+        }
+      });
+      root.querySelectorAll('[data-keep-existing]').forEach(btn=>{
+        btn.addEventListener('click', e=>{
+          const key = e.target.dataset.keepExisting;
+          resolveImportConflict(key, 'existing', null, null);
+        });
+      });
+      root.querySelectorAll('[data-use-imported]').forEach(btn=>{
+        btn.addEventListener('click', e=>{
+          const key = e.target.dataset.useImported;
+          const item = importConflicts.list.find(c => c.key === key);
+          if(item) resolveImportConflict(key, 'imported', item.incomingRows, importConflicts.importRoster);
+        });
+      });
+      const importBtn = document.getElementById('zs-import-btn');
+      const importInput = document.getElementById('zs-import-input');
+      if(importBtn && importInput) importBtn.addEventListener('click', ()=>{ importInput.click(); });
+      if(importInput) importInput.addEventListener('change', e=>{
+        const file = e.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = evt=>{
+          try {
+            const text = evt.target.result;
+            let data;
+            // Try JSON first (old format), then CSV
+            try { data = JSON.parse(text); } catch(e){ data = null; }
+            if(data && data.weekArchive && data.roster){
+              if(!confirm('This replaces everything currently shown with the backup file. Continue?')) return;
+              weekArchive = data.weekArchive;
+              roster = data.roster;
+              targets = Object.assign(targets, data.targets || {});
+              cal = data.cal || cal;
+              const key = weekKey(cal.month, cal.week);
+              scheduleRows = weekArchive[key] ? JSON.parse(JSON.stringify(weekArchive[key].scheduleRows)) : scheduleRows;
+              otHours = weekArchive[key] ? JSON.parse(JSON.stringify(weekArchive[key].otHours || {})) : {};
+              dailySales = weekArchive[key] ? JSON.parse(JSON.stringify(weekArchive[key].dailySales || [null,null,null,null,null,null,null])) : [null,null,null,null,null,null,null];
+              persistCurrent();
+              render();
+              return;
+            }
+            // CSV: just import the roster section so staff are loaded
+            const lines = text.split('\n').map(l=>l.split(',').map(v=>v.replace(/^"|"$/g,'').replace(/""/g,'"')));
+            let inRoster = false, inTargets = false;
+            const newRoster = [], newTargets = {};
+            lines.forEach(cols=>{
+              if(!cols[0]) return;
+              const h = cols[0].toUpperCase();
+              if(h.includes('== ROSTER ==')){ inRoster=true; inTargets=false; return; }
+              if(h.includes('== TARGETS ==')){ inRoster=false; inTargets=true; return; }
+              if(h.includes('== WEEK')){ inRoster=false; inTargets=false; return; }
+              if(inRoster && cols[0] && cols[0]!=='ID' && cols[1]){
+                newRoster.push({ id:cols[0], name:cols[1], role:cols[2]||'PT', status:cols[3]||'active', standardHours:parseFloat(cols[4])||8.5, rate:parseFloat(cols[5])||8.80, note:cols[6]||'' });
+              }
+              if(inTargets && cols[0] && cols[0]!=='Weekly Sales Target'){
+                newTargets.weeklySalesTarget=parseFloat(cols[0])||20000;
+                newTargets.monthlySalesTarget=parseFloat(cols[1])||86600;
+                newTargets.weeklyCap=parseFloat(cols[2])||2900;
+                newTargets.monthlyCap=parseFloat(cols[3])||12586;
+              }
+            });
+            if(newRoster.length===0){ alert('Could not read roster from CSV. Check the file format.'); return; }
+            if(!confirm('Import ' + newRoster.length + ' staff from CSV? This replaces the current roster. Continue?')) return;
+            roster = newRoster;
+            targets = Object.assign(targets, newTargets);
+            scheduleRows = roster.filter(s=>s.status==='active').map(s=>({ id:uid('row'), staffId:s.id, shifts:[0,1,2,3,4,5,6].map(()=>blankShift()) }));
+            otHours = {};
+            dailySales = [null,null,null,null,null,null,null];
+            persistCurrent();
+            render();
+          } catch(err){
+            alert('Could not read that file: ' + err.message);
+          }
+        };
+        reader.readAsText(file);
+      });
+      root.querySelectorAll('[data-delete-week]').forEach(btn=>{
+        btn.addEventListener('click', e=>{
+          e.stopPropagation();
+          const key = e.target.dataset.deleteWeek;
+          const [m,w] = key.split('-').map(Number);
+          if(confirm(`Permanently delete the saved ${MONTH_NAMES[m-1]} Week ${w} schedule? This can't be undone.`)){
+            delete weekArchive[key];
+            try { localStorage.setItem('zus_weeks', JSON.stringify(weekArchive)); } catch(err){}
+            render();
+          }
+        });
+      });
+      root.querySelectorAll('[data-toggle-month]').forEach(header=>{
+        header.addEventListener('click', ()=>{
+          const m = parseInt(header.dataset.toggleMonth);
+          openMonths[m] = !openMonths[m];
+          const group = root.querySelector(`.zs-month-group[data-month="${m}"]`);
+          if(group){
+            group.classList.toggle('open', !!openMonths[m]);
+            const chevron = group.querySelector('.zs-month-chevron');
+            if(chevron) chevron.style.transform = openMonths[m] ? 'rotate(90deg)' : '';
+          }
+        });
+      });
+    }
+  }
+
+  render();
+})();
+</script>
