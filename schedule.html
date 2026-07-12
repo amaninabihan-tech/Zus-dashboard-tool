@@ -1,4 +1,6 @@
 <meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <div id="zus-scheduler"></div>
 <style>
 #zus-scheduler {
@@ -974,6 +976,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
 
   let activeTab = 'schedule';
   let importConflicts = null; // when set, shows the "review conflicts" screen instead of the normal schedule
+  let weekImportReview = null; // when set, shows the "confirm unmatched names" screen for a Week Import (CSV/Excel)
 
   const root = document.getElementById('zus-scheduler');
 
@@ -1461,6 +1464,8 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
 
     if(importConflicts){
       html += renderImportConflicts();
+    } else if(weekImportReview){
+      html += renderWeekImportReview();
     } else if(activeTab==='roster'){
       html += renderRoster();
     } else {
@@ -1517,6 +1522,46 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         </div>
       </div>`;
     });
+    return html;
+  }
+
+  function renderWeekImportReview(){
+    const { parsedRows, weekLabel, dateLabel, resolutions } = weekImportReview;
+    const toolCols = getColumns().filter(c=>c.valid);
+    const toolWeekLabel = toolCols.map(c=>c.weekday.toUpperCase()+' '+c.dateNum).join(', ');
+    const detectedLabel = dateLabel || weekLabel || 'Not detected';
+    const dateMismatch = dateLabel && toolWeekLabel && !toolCols.every((c,i)=> dateLabel.includes(' '+c.dateNum) );
+    let html = `
+      <div class="zs-section-title">Import Preview \u2014 Tally Before You Proceed</div>
+      <div class="zs-table-wrap" style="padding:14px 16px; margin-bottom:14px;">
+        <p class="zs-note" style="margin:0 0 6px;"><b>Detected in file:</b> ${detectedLabel}</p>
+        <p class="zs-note" style="margin:0;"><b>Currently open in this tool:</b> ${toolWeekLabel} (${MONTH_NAMES[cal.month-1]}, Week ${cal.week}) \u2014 importing will fill in <u>this</u> week. If the dates above don't match, cancel, switch to the correct Month/Week using the controls above, then import again.</p>
+        ${dateMismatch ? `<p style="color:var(--red); font-weight:700; font-size:12px; margin:8px 0 0;">\u26a0 The dates detected in the file don't look like they match the week you have open \u2014 double-check before applying.</p>` : ''}
+      </div>
+      <div class="zs-table-wrap" style="padding:0;">
+        <table class="zs-roster" style="min-width:0;">
+          <thead><tr><th>Name in file</th><th>Shifts (Mon\u2013Sun)</th><th>Import as</th></tr></thead>
+          <tbody>
+            ${parsedRows.map((pr, idx) => `
+              <tr>
+                <td class="name-cell">${pr.rawName}</td>
+                <td>${pr.shifts.map(s=>s.code + (s.unrecognized?' *':'')).join(', ')}</td>
+                <td><select class="week-import-resolve" data-idx="${idx}">
+                  <option value="SKIP" ${resolutions[idx]==='SKIP'?'selected':''}>-- Skip this row --</option>
+                  <option value="NEW" ${resolutions[idx]==='NEW'?'selected':''}>-- Add as new Part Timer --</option>
+                  ${roster.map(s=>`<option value="${s.id}" ${resolutions[idx]===s.id?'selected':''}>${s.name} (${s.role})</option>`).join('')}
+                </select></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <p class="zs-note" style="margin-top:8px;">* means the file used text this tool didn't recognize as a shift code or time range, and it was set to OFF \u2014 worth checking that row after importing.</p>
+    `;
+    html += `<div class="zs-actions-row" style="margin-top:14px;">
+      <button class="zs-mini-btn" id="zs-week-import-apply" style="background:var(--green);">Apply Import</button>
+      <button class="zs-mini-btn ghost" id="zs-week-import-cancel">Cancel</button>
+    </div>`;
     return html;
   }
 
@@ -1744,10 +1789,11 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         <button class="zs-mini-btn" id="zs-add-row">+ Add Row</button>
         <button class="zs-mini-btn ghost" id="zs-reset-btn">Reset the Week</button>
         <button class="zs-mini-btn ghost" id="zs-clear-storage-btn">Clear all saved weeks</button>
-        <button class="zs-mini-btn ghost" id="zs-export-btn">Export file (.csv)</button>
-        <button class="zs-mini-btn ghost" id="zs-import-btn">Import file (.csv)</button>
         <button class="zs-mini-btn" id="zs-import-real-btn" style="background:var(--green);">Import Excel Data</button>
-        <input type="file" id="zs-import-input" accept=".csv,.xlsx,.xls,text/csv" style="display:none"/>
+        <button class="zs-mini-btn ghost" id="zs-export-week-btn">Export Week (CSV/Excel)</button>
+        <button class="zs-mini-btn ghost" id="zs-export-all-weeks-btn">Export All Saved Weeks (Stacked)</button>
+        <button class="zs-mini-btn ghost" id="zs-import-week-btn">Import Week (CSV/Excel)</button>
+        <input type="file" id="zs-import-week-input" accept=".csv,.xlsx,.xls,text/csv" style="display:none"/>
       </div>
     `;
 
@@ -1771,6 +1817,412 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     </div>`;
     html += renderHistory();
     return html;
+  }
+
+  // ── Week Import/Export (CSV/Excel) — matches only by staff name + day-by-day shift; ──
+  // ── the file's layout doesn't need to match this tool's own layout in either direction. ──
+  const SHIFT_CODE_ALIASES = {
+    '': 'OFF', 'off': 'OFF', 'o': 'OFF', 'rest': 'OFF', 'offday': 'OFF',
+    'off(r)': 'OFFDAYR', 'off (r)': 'OFFDAYR', 'offr': 'OFFDAYR', 'offdayr': 'OFFDAYR', 'offday(r)': 'OFFDAYR', 'offday (r)': 'OFFDAYR', 'requested off': 'OFFDAYR', 'off req': 'OFFDAYR', 'offreq': 'OFFDAYR', 'off fix': 'OFFDAYR',
+    'al': 'AL', 'annual leave': 'AL', 'annual': 'AL',
+    'bl': 'BL', 'birthday leave': 'BL', 'birthday': 'BL',
+    'mc': 'MC', 'medical': 'MC', 'medical certificate': 'MC', 'sick': 'MC', 'sick leave': 'MC',
+    'm': 'M', 'morning': 'M', 'am': 'M',
+    'c': 'C', 'closing': 'C', 'pm': 'C', 'close': 'C',
+    'mid': 'MID', 'midshift': 'MID', 'mid-shift': 'MID', 'middle': 'MID',
+    'custom': 'CUSTOM', 'cus': 'CUSTOM',
+    'cover': 'COVER', 'cov': 'COVER',
+    'pts1': 'PTS1', 'pts2': 'PTS2'
+  };
+  function normName(s){ return String(s==null?'':s).trim().toLowerCase().replace(/\s+/g,' '); }
+  function matchStaffByName(rawName){
+    const target = normName(rawName);
+    if(!target) return null;
+    let hit = roster.find(s => normName(s.name) === target);
+    if(hit) return hit;
+    hit = roster.find(s => normName(s.name).includes(target) || target.includes(normName(s.name)));
+    return hit || null;
+  }
+  // Reads a shift cell — a known code/alias (matched whole, or as a leading word before a
+  // parenthetical note like "M (CHAI LENG)"), or a raw time range, which becomes a CUSTOM
+  // shift with parsed start/end times. Handles both "7.00PM-10.30PM" and "0830AM-0200PM".
+  const TIME_RANGE_SEP_RE = /(\d{1,2})[.:](\d{2})\s*([AaPp]\.?[Mm]\.?)\s*[-\u2013]\s*(\d{1,2})[.:](\d{2})\s*([AaPp]\.?[Mm]\.?)/;
+  const TIME_RANGE_COMPACT_RE = /(\d{1,2})(\d{2})\s*([AaPp]\.?[Mm]\.?)\s*[-\u2013]\s*(\d{1,2})(\d{2})\s*([AaPp]\.?[Mm]\.?)/;
+  function to24h(hh, mm, ampm){
+    let h = parseInt(hh, 10);
+    if(/p/i.test(ampm) && h !== 12) h += 12;
+    if(/a/i.test(ampm) && h === 12) h = 0;
+    return { HH: String(h).padStart(2,'0'), MM: mm };
+  }
+  function parseShiftCell(raw){
+    const text = String(raw==null?'':raw).trim();
+    const key = text.toLowerCase();
+    if(SHIFT_CODE_ALIASES.hasOwnProperty(key)) return { code: SHIFT_CODE_ALIASES[key] };
+    const lead = text.match(/^([A-Za-z]+)\b/);
+    if(lead && SHIFT_CODE_ALIASES.hasOwnProperty(lead[1].toLowerCase())){
+      return { code: SHIFT_CODE_ALIASES[lead[1].toLowerCase()] };
+    }
+    const m = text.match(TIME_RANGE_SEP_RE) || text.match(TIME_RANGE_COMPACT_RE);
+    if(m){
+      const start = to24h(m[1], m[2], m[3]);
+      const end = to24h(m[4], m[5], m[6]);
+      return { code: 'CUSTOM', csHH: start.HH, csMM: start.MM, ceHH: end.HH, ceMM: end.MM };
+    }
+    return { code: 'OFF', unrecognized: text || null };
+  }
+  // Reads the uploaded file and returns { sheets: [{ name, rows2D }] } — every sheet for
+  // Excel files (real rosters are often not on the first tab), one pseudo-sheet for CSV.
+  function readFileAsSheets(file, cb){
+    const isExcel = /\.xlsx$|\.xls$/i.test(file.name);
+    const reader = new FileReader();
+    reader.onload = evt => {
+      try {
+        if(isExcel && window.XLSX){
+          const wb = XLSX.read(evt.target.result, { type: 'array' });
+          const sheets = wb.SheetNames.map(name => ({
+            name,
+            rows2D: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' })
+          }));
+          cb(sheets);
+        } else {
+          const text = typeof evt.target.result === 'string' ? evt.target.result : new TextDecoder().decode(evt.target.result);
+          const rows = text.split(/\r?\n/).filter(l=>l.trim().length).map(line=>{
+            const cells = [];
+            let cur = '', inQ = false;
+            for(let i=0;i<line.length;i++){
+              const ch = line[i];
+              if(ch === '"'){ inQ = !inQ; continue; }
+              if(ch === ',' && !inQ){ cells.push(cur); cur=''; continue; }
+              cur += ch;
+            }
+            cells.push(cur);
+            return cells;
+          });
+          cb([{ name: file.name, rows2D: rows }]);
+        }
+      } catch(err){ alert('Could not read that file: ' + err.message); }
+    };
+    if(isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file);
+  }
+  // Finds every row that lists Mon..Sun (in any order/spelling) — real weekly rosters often
+  // stack several weeks in one sheet, so we need every header, not just one, to know where
+  // each week block starts and ends.
+  function findWeekdayHeaderRows(rows2D){
+    const dayPatterns = [/^mon/i, /^tue/i, /^wed/i, /^thu/i, /^fri/i, /^sat/i, /^sun/i];
+    const found = [];
+    for(let r = 0; r < rows2D.length; r++){
+      const row = rows2D[r] || [];
+      const cols = dayPatterns.map(pat => row.findIndex(c => pat.test(String(c).trim())));
+      const foundCount = cols.filter(i => i !== -1).length;
+      if(foundCount >= 5) found.push({ rowIdx: r, cols, foundCount });
+    }
+    return found;
+  }
+  // The staff-name column isn't always directly left of the day columns (real sheets have
+  // note/task columns wedged in), so pick whichever column left of the days is most
+  // consistently filled with non-numeric text across the rows in this week's block.
+  function detectNameColumn(rows2D, headerRowIdx, boundaryIdx, dayCols){
+    const validDayCols = dayCols.filter(c => c !== -1);
+    const minDayCol = validDayCols.length ? Math.min(...validDayCols) : 1;
+    let bestCol = Math.max(0, minDayCol - 1), bestScore = -1;
+    for(let c = 0; c < minDayCol; c++){
+      let score = 0;
+      for(let r = headerRowIdx+1; r < boundaryIdx; r++){
+        const v = rows2D[r] && rows2D[r][c];
+        const s = v==null ? '' : String(v).trim();
+        if(s && !/^-?\d+(\.\d+)?$/.test(s)) score++;
+      }
+      if(score > bestScore){ bestScore = score; bestCol = c; }
+    }
+    return bestCol;
+  }
+  // Row labels that are summary/meta rows, not staff — real rosters have plenty of these
+  // (date rows, task rows, headcount rows, section dividers like "PART TIME").
+  const NON_STAFF_ROW_RE = /^(date|day|task|work ?task|ph\s*\/?\s*event|promotion|cash sales|target sales|sales achieved|actual sales|shift headcount|planned work hour|actual work hour|target productivity|actual productivity|outlet supervisor|outlet leader|full ?time|part ?time|staff|management|finalize|total target)/i;
+  // Turns one sheet's raw 2D rows into { rawName, shifts:[7 parsed cells] } entries for just
+  // the FIRST week block found in that sheet — bounded by the next weekday-header row, so
+  // multiple weeks stacked in one sheet don't get mixed together.
+  // Looks a few rows around the weekday-header row for a row of small numbers (1-31) in
+  // the same columns — that's the actual date-of-month row, if the file has one.
+  function findDateRowValues(rows2D, headerIdx, dayCols){
+    for(let r = Math.max(0, headerIdx-3); r <= headerIdx+1; r++){
+      if(r === headerIdx) continue;
+      const row = rows2D[r] || [];
+      const vals = dayCols.map(ci => ci===-1 ? '' : String(row[ci]==null?'':row[ci]).trim());
+      const numericCount = vals.filter(v => /^\d{1,2}(\.0+)?$/.test(v)).length;
+      if(numericCount >= 5) return vals.map(v => v ? String(Math.round(parseFloat(v))) : '?');
+    }
+    return null;
+  }
+  function extractWeekRowsFromSheet(rows2D){
+    const headers = findWeekdayHeaderRows(rows2D);
+    if(!headers.length) return { rows: [], weekLabel: null, dateLabel: null };
+    const { rowIdx: headerIdx, cols: dayCols } = headers[0];
+    const boundaryIdx = headers.length > 1 ? headers[1].rowIdx : rows2D.length;
+    const nameCol = detectNameColumn(rows2D, headerIdx, boundaryIdx, dayCols);
+    const dayTokens = dayCols.filter(c=>c!==-1).map(c => String(rows2D[headerIdx][c]).trim());
+    const weekLabel = dayTokens.join(', ');
+    const dateVals = findDateRowValues(rows2D, headerIdx, dayCols);
+    const dateLabel = dateVals ? dayTokens.map((d,i)=>d.slice(0,3).toUpperCase()+' '+dateVals[i]).join(', ') : null;
+    const out = [];
+    for(let r = headerIdx+1; r < boundaryIdx; r++){
+      const row = rows2D[r] || [];
+      const name = String(row[nameCol]==null?'':row[nameCol]).trim();
+      if(!name || NON_STAFF_ROW_RE.test(name)) continue;
+      const dayVals = dayCols.map(ci => ci===-1 ? '' : String(row[ci]==null?'':row[ci]).trim());
+      if(!dayVals.some(v=>v)) continue; // no schedule data on this row, skip
+      out.push({ rawName: name, shifts: dayVals.map(v => parseShiftCell(v)) });
+    }
+    return { rows: out, weekLabel, dateLabel };
+  }
+  function extractWeekRows(sheets){
+    for(const sheet of sheets){
+      const { rows, weekLabel, dateLabel } = extractWeekRowsFromSheet(sheet.rows2D);
+      if(rows.length) return { rows, sheetName: sheet.name, weekLabel, dateLabel };
+    }
+    return { rows: [], sheetName: null, weekLabel: null, dateLabel: null };
+  }
+  function startWeekImportReview(parsedRows, weekLabel, dateLabel){
+    const resolutions = parsedRows.map(pr => {
+      const staff = matchStaffByName(pr.rawName);
+      return staff ? staff.id : 'SKIP';
+    });
+    weekImportReview = { parsedRows, weekLabel, dateLabel, resolutions };
+    render();
+  }
+  function applyWeekImport(entries){
+    // entries: [{ staffId, shifts:[7 parsed cells: {code, csHH?, csMM?, ceHH?, ceMM?}] }]
+    let unrecognizedCount = 0;
+    entries.forEach(({ staffId, shifts }) => {
+      let row = scheduleRows.find(r => r.staffId === staffId);
+      if(!row){ row = { id: uid('row'), staffId, shifts: [0,1,2,3,4,5,6].map(()=>blankShift()) }; scheduleRows.push(row); }
+      row.shifts = shifts.map(cell => {
+        const s = blankShift();
+        s.type = cell.code;
+        if(cell.unrecognized) unrecognizedCount++;
+        if(cell.code==='MID') s.midStart = 600;
+        if(cell.code==='CUSTOM'){
+          s.csHH = cell.csHH || '09'; s.csMM = cell.csMM || '00';
+          s.ceHH = cell.ceHH || '17'; s.ceMM = cell.ceMM || '30';
+        }
+        if(cell.code==='COVER') s.coverDirection = 'out';
+        return s;
+      });
+    });
+    weekImportReview = null;
+    persistCurrent();
+    render();
+    alert('Week schedule imported for ' + entries.length + ' staff member(s).' + (unrecognizedCount ? ' ' + unrecognizedCount + ' cell(s) had text this tool didn\'t recognize and were set to OFF \u2014 worth a quick check.' : ''));
+  }
+  function to12hLabel(HH, MM){
+    let h = parseInt(HH, 10);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    let h12 = h % 12; if(h12 === 0) h12 = 12;
+    return h12 + '.' + (MM || '00') + ampm;
+  }
+  function exportCellText(sh){
+    if(sh.type === 'OFF') return 'OFFDAY';
+    if(sh.type === 'OFFDAYR') return 'OFFDAY (R)';
+    if(sh.type === 'CUSTOM' || sh.type === 'COVER'){
+      return to12hLabel(sh.csHH || '09', sh.csMM || '00') + ' - ' + to12hLabel(sh.ceHH || '17', sh.ceMM || '30');
+    }
+    return sh.type;
+  }
+  const XLSX_STYLE = {
+    COLORS: {
+      navy: 'FF1B3A6B', navyDark: 'FF0F2748', gold: 'FFD6AD55', cream: 'FFFBF7EE',
+      blueBg: 'FFDCE7F7', purple: 'FFE3DBF5', teal: 'FF008080', red: 'FFC23B3B',
+      alGreen: 'FFCDEEE6', white: 'FFFFFFFF'
+    },
+    FONT_NAME: 'Spectral',
+    thinBorder: {
+      top: {style:'thin', color:{argb:'FFB0B0B0'}}, left: {style:'thin', color:{argb:'FFB0B0B0'}},
+      bottom: {style:'thin', color:{argb:'FFB0B0B0'}}, right: {style:'thin', color:{argb:'FFB0B0B0'}}
+    },
+    centered: { horizontal: 'center', vertical: 'middle', wrapText: true }
+  };
+  const SECTION_ORDER = [
+    { role: 'OS', label: 'OUTLET SUPERVISOR' },
+    { role: 'FT', label: 'FULLTIME' },
+    { role: 'CS', label: 'COVER STAFF' },
+    { role: 'PT', label: 'PART TIME' }
+  ];
+  // Writes one week's table (title, DATE/DAY, TARGET/SALES/TASK, role sections, headcount)
+  // into `ws` starting at row `startRow`. Returns the next free row after this block, so
+  // multiple weeks can be stacked one after another in the same sheet.
+  function writeWeekBlock(ws, startRow, month, week, scheduleRowsForWeek, rosterForWeek, dailySalesForWeek){
+    const { COLORS, FONT_NAME, thinBorder, centered } = XLSX_STYLE;
+    const font = (opts) => Object.assign({ name: FONT_NAME }, opts || {});
+    const fill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+    const lastCol = 9;
+    const columns = getColumnsFor(month, week);
+    const staffById = {};
+    rosterForWeek.forEach(s => { staffById[s.id] = s; });
+    let r = startRow;
+
+    ws.mergeCells(r,2,r,lastCol);
+    const titleCell = ws.getCell(r,2);
+    titleCell.value = `${MONTH_NAMES[month-1].toUpperCase()} ${YEAR} (WEEK ${week})`;
+    titleCell.font = font({ bold:true, color:{argb:COLORS.white}, size:12 });
+    titleCell.fill = fill(COLORS.navyDark);
+    titleCell.alignment = centered;
+    r++;
+
+    let row = ws.getRow(r);
+    row.getCell(2).value = 'DATE';
+    columns.forEach((c,i)=>{ row.getCell(3+i).value = c.dateNum; });
+    for(let c=2;c<=lastCol;c++){ const cell=row.getCell(c); cell.fill=fill(COLORS.gold); cell.font=font({bold:true}); cell.alignment=centered; cell.border=thinBorder; }
+    r++;
+
+    row = ws.getRow(r);
+    row.getCell(2).value = 'DAY';
+    columns.forEach((c,i)=>{ row.getCell(3+i).value = c.weekday.toUpperCase(); });
+    for(let c=2;c<=lastCol;c++){ const cell=row.getCell(c); cell.fill=fill(COLORS.gold); cell.font=font({bold:true}); cell.alignment=centered; cell.border=thinBorder; }
+    r++;
+
+    row = ws.getRow(r);
+    row.getCell(2).value = 'TASK';
+    columns.forEach((c,i)=>{ row.getCell(3+i).value = (c.opNotes && c.opNotes.length) ? c.opNotes.join(' / ') : ''; });
+    for(let c=2;c<=lastCol;c++){ const cell=row.getCell(c); cell.fill=fill(COLORS.blueBg); cell.border=thinBorder; cell.alignment=centered; cell.font = font(c===2?{bold:true}:{}); }
+    r += 2;
+
+    SECTION_ORDER.forEach(sec => {
+      const rowsForRole = scheduleRowsForWeek.filter(rr => { const st = staffById[rr.staffId]; return st && st.role === sec.role && st.status === 'active'; });
+      if(!rowsForRole.length) return;
+      ws.mergeCells(r,2,r,lastCol);
+      const hCell = ws.getCell(r,2);
+      hCell.value = sec.label;
+      hCell.font = font({ bold:true, color:{argb:COLORS.white} });
+      hCell.fill = fill(COLORS.navy);
+      hCell.alignment = centered;
+      r++;
+      rowsForRole.forEach(rowData => {
+        const st = staffById[rowData.staffId];
+        const rr2 = ws.getRow(r);
+        const nameCell = rr2.getCell(2);
+        nameCell.value = st ? st.name : '(unassigned)';
+        nameCell.font = font({ bold:true });
+        nameCell.border = thinBorder;
+        rowData.shifts.forEach((sh,i)=>{
+          const cell = rr2.getCell(3+i);
+          cell.value = exportCellText(sh);
+          cell.border = thinBorder;
+          cell.alignment = centered;
+          cell.font = font();
+          if(sh.type==='OFF' || sh.type==='OFFDAYR'){ cell.fill = fill(COLORS.purple); }
+          else if(sh.type==='BL'){ cell.fill = fill(COLORS.teal); cell.font = font({ color:{argb:COLORS.white}, bold:true }); }
+          else if(sh.type==='MC'){ cell.fill = fill(COLORS.red); cell.font = font({ color:{argb:COLORS.white}, bold:true }); }
+          else if(sh.type==='AL'){ cell.fill = fill(COLORS.alGreen); }
+        });
+        r++;
+      });
+    });
+
+    r++;
+    row = ws.getRow(r);
+    row.getCell(2).value = 'HEADCOUNT';
+    row.getCell(2).font = font({ bold:true });
+    columns.forEach((c, di) => {
+      const tally = {};
+      scheduleRowsForWeek.forEach(rowData => {
+        const st = staffById[rowData.staffId];
+        if(!st || st.status !== 'active') return;
+        const t = rowData.shifts[di].type;
+        if(t==='M' || t==='C' || t==='MID') tally[t] = (tally[t]||0) + 1;
+      });
+      row.getCell(3+di).value = ['M','MID','C'].filter(k=>tally[k]).map(k=>tally[k]+k).join(', ');
+    });
+    for(let c=2;c<=lastCol;c++){ const cell=row.getCell(c); cell.border=thinBorder; cell.alignment=centered; cell.font = font(c===2?{bold:true}:{}); }
+
+    return r + 1; // next free row
+  }
+  function newStyledWorkbook(sheetName){
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet(sheetName);
+    ws.columns = [{width:3},{width:19},{width:19},{width:19},{width:19},{width:19},{width:19},{width:19},{width:19}];
+    return { wb, ws };
+  }
+  function downloadWorkbook(wb, filename){
+    wb.xlsx.writeBuffer().then(buffer => {
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename + '.xlsx';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }).catch(err => {
+      alert('Could not build the styled Excel file (' + err.message + ').');
+    });
+  }
+  function exportWeekFile(){
+    const columns = getColumns();
+    const staffById = {};
+    roster.forEach(s => { staffById[s.id] = s; });
+    const filename = `zus_week_${weekKey(cal.month,cal.week)}_${new Date().toISOString().slice(0,10)}`;
+    if(!window.ExcelJS){
+      exportWeekFileCsvFallback(columns, staffById, SECTION_ORDER, filename);
+      return;
+    }
+    const { wb, ws } = newStyledWorkbook(`Week ${cal.week} - ${MONTH_NAMES[cal.month-1]}`);
+    writeWeekBlock(ws, 1, cal.month, cal.week, scheduleRows, roster, dailySales);
+    downloadWorkbook(wb, filename);
+  }
+  // Stacks every SAVED week (plus the one currently open) vertically in one sheet, in
+  // chronological order, so you get everything "vertically visible" in a single import —
+  // no manual copy/paste between tabs needed. Note: daily sales figures are only kept in
+  // memory for the week you currently have open, so SALES ACHIEVED will be blank for
+  // other weeks in this combined export.
+  function exportAllWeeksFile(){
+    if(!window.ExcelJS){ alert('This export needs the Excel styling library, which isn\'t available right now (check your internet connection) — try again once you\'re online.'); return; }
+    persistCurrent(); // make sure the currently open week is included and up to date
+    const ascending = Object.keys(weekArchive).sort((a,b)=>{
+      const [am,aw] = a.split('-').map(Number), [bm,bw] = b.split('-').map(Number);
+      return (am*10+aw) - (bm*10+bw);
+    });
+    if(!ascending.length){ alert('No saved weeks found to export yet.'); return; }
+    const currentKey = weekKey(cal.month, cal.week);
+    const idx = ascending.indexOf(currentKey);
+    // Current week first, then step backward (older) to the earliest week, then wrap to
+    // the newest week and continue backward down to just after the current week.
+    const keys = idx === -1
+      ? ascending.slice().reverse() // current week not saved yet (shouldn't happen after persistCurrent, but just in case) — fall back to plain newest-to-oldest
+      : [ascending[idx], ...ascending.slice(0, idx).reverse(), ...ascending.slice(idx+1).reverse()];
+    const { wb, ws } = newStyledWorkbook('All Weeks');
+    let r = 1;
+    keys.forEach(key => {
+      const [m, w] = key.split('-').map(Number);
+      const wk = weekArchive[key];
+      const isCurrent = (m === cal.month && w === cal.week);
+      r = writeWeekBlock(ws, r, m, w, wk.scheduleRows, wk.rosterSnapshot || roster, isCurrent ? dailySales : [null,null,null,null,null,null,null]);
+      r++; // extra spacer row between week blocks
+    });
+    downloadWorkbook(wb, `zus_all_weeks_${new Date().toISOString().slice(0,10)}`);
+  }
+  // Plain-text fallback (no colors/borders) if ExcelJS fails to load — same content, just flat.
+  function exportWeekFileCsvFallback(columns, staffById, SECTION_ORDER, filename){
+    const data = [];
+    data.push([`${MONTH_NAMES[cal.month-1].toUpperCase()} ${YEAR} (WEEK ${cal.week})`]);
+    data.push(['DATE', ...columns.map(c=>c.dateNum)]);
+    data.push(['DAY', ...columns.map(c=>c.weekday.toUpperCase())]);
+    data.push(['TASK', ...columns.map(c=>(c.opNotes&&c.opNotes.length)?c.opNotes.join(' / '):'')]);
+    data.push([]);
+    SECTION_ORDER.forEach(sec=>{
+      const rowsForRole = scheduleRows.filter(r=>{ const st=staffById[r.staffId]; return st && st.role===sec.role && st.status==='active'; });
+      if(!rowsForRole.length) return;
+      data.push([sec.label]);
+      rowsForRole.forEach(row=>{
+        const st = staffById[row.staffId];
+        data.push([st?st.name:'(unassigned)', ...row.shifts.map(sh=>exportCellText(sh))]);
+      });
+    });
+    const esc = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
+    const csv = data.map(row=>row.map(esc).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function attachListeners(){
@@ -1962,56 +2414,44 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
           location.reload();
         }
       });
-      const exportBtn = document.getElementById('zs-export-btn');
-      if(exportBtn) exportBtn.addEventListener('click', ()=>{
-        persistCurrent();
-        // Build CSV: metadata block, then roster block, then each week block
-        const esc = v => '"' + String(v===null||v===undefined?'':v).replace(/"/g,'""') + '"';
-        const rows = [];
-        rows.push(['ZUS COFFEE PENANG - SCHEDULE EXPORT']);
-        rows.push(['Exported', new Date().toLocaleString()]);
-        rows.push([]);
-        rows.push(['== ROSTER ==']);
-        rows.push(['ID','Name','Role','Status','Std Hours','Rate (RM/hr)','Notes']);
-        roster.forEach(s => rows.push([s.id,s.name,s.role,s.status,s.standardHours,s.rate,s.note||'']));
-        rows.push([]);
-        rows.push(['== TARGETS ==']);
-        rows.push(['Weekly Sales Target','Monthly Sales Target','Weekly Budget Cap','Monthly Budget Cap']);
-        rows.push([targets.weeklySalesTarget,targets.monthlySalesTarget,targets.weeklyCap,targets.monthlyCap]);
-        rows.push([]);
-        // Weeks
-        Object.entries(weekArchive).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([key,data])=>{
-          const [m,w] = key.split('-').map(Number);
-          const cols = getColumnsFor(m,w);
-          rows.push([`== WEEK ${MONTH_NAMES[m-1].toUpperCase()} WEEK ${w} ==`]);
-          rows.push(['Staff ID','Name','Role','Mon','Tue','Wed','Thu','Fri','Sat','Sun','Paid Hrs','OT Hrs','Weekly Pay']);
-          const rRoster = data.rosterSnapshot || roster;
-          data.scheduleRows.forEach(row=>{
-            const staff = rRoster.find(s=>s.id===row.staffId);
-            const w2 = rowWeeklyFor(rRoster,row,data.otHours,cols);
-            rows.push([
-              row.staffId||'',
-              staff?staff.name:'(unassigned)',
-              staff?staff.role:'',
-              ...row.shifts.map(sh=>sh.type),
-              w2.paid.toFixed(1),
-              w2.otHours.toFixed(1),
-              w2.cost.toFixed(2)
-            ]);
-          });
-          rows.push([]);
+      const exportWeekBtn = document.getElementById('zs-export-week-btn');
+      if(exportWeekBtn) exportWeekBtn.addEventListener('click', ()=>{ exportWeekFile(); });
+      const exportAllWeeksBtn = document.getElementById('zs-export-all-weeks-btn');
+      if(exportAllWeeksBtn) exportAllWeeksBtn.addEventListener('click', ()=>{ exportAllWeeksFile(); });
+      const importWeekBtn = document.getElementById('zs-import-week-btn');
+      const importWeekInput = document.getElementById('zs-import-week-input');
+      if(importWeekBtn && importWeekInput) importWeekBtn.addEventListener('click', ()=>{ importWeekInput.click(); });
+      if(importWeekInput) importWeekInput.addEventListener('change', e=>{
+        const file = e.target.files[0];
+        if(!file) return;
+        readFileAsSheets(file, sheets => {
+          const { rows: parsedRows, sheetName, weekLabel, dateLabel } = extractWeekRows(sheets);
+          if(!parsedRows.length){ alert('Could not find a Mon\u2013Sun schedule in that file (checked ' + sheets.length + ' sheet(s)). Make sure at least one sheet has a row listing the days of the week, with staff names in the rows below it.'); return; }
+          startWeekImportReview(parsedRows, weekLabel, dateLabel);
         });
-        const csv = rows.map(r=>r.map(esc).join(',')).join('\n');
-        const blob = new Blob([csv], {type:'text/csv'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `zus_schedule_${new Date().toISOString().slice(0,10)}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        importWeekInput.value = '';
       });
+      const weekImportApplyBtn = document.getElementById('zs-week-import-apply');
+      if(weekImportApplyBtn) weekImportApplyBtn.addEventListener('click', ()=>{
+        const entries = [];
+        const selects = root.querySelectorAll('.week-import-resolve');
+        selects.forEach(sel => {
+          const idx = parseInt(sel.dataset.idx, 10);
+          const item = weekImportReview.parsedRows[idx];
+          const val = sel.value;
+          if(val === 'SKIP') return;
+          if(val === 'NEW'){
+            const newStaff = { id: uid('st'), name: item.rawName, role: 'PT', status: 'active', standardHours: ROLE_DEFAULTS.PT.standardHours, rate: ROLE_DEFAULTS.PT.rate, note: '' };
+            roster.push(newStaff);
+            entries.push({ staffId: newStaff.id, shifts: item.shifts });
+          } else {
+            entries.push({ staffId: val, shifts: item.shifts });
+          }
+        });
+        applyWeekImport(entries);
+      });
+      const weekImportCancelBtn = document.getElementById('zs-week-import-cancel');
+      if(weekImportCancelBtn) weekImportCancelBtn.addEventListener('click', ()=>{ weekImportReview = null; render(); });
       const importRealBtn = document.getElementById('zs-import-real-btn');
       if(importRealBtn) importRealBtn.addEventListener('click', ()=>{
         if(confirm('Import the 6 verified weeks from your real Straits City Excel data (June W1-4, July W1-2)? Weeks with no existing data will be added automatically. Weeks that already have data will show a comparison for you to choose.')){
@@ -2030,68 +2470,6 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
           const item = importConflicts.list.find(c => c.key === key);
           if(item) resolveImportConflict(key, 'imported', item.incomingRows, importConflicts.importRoster);
         });
-      });
-      const importBtn = document.getElementById('zs-import-btn');
-      const importInput = document.getElementById('zs-import-input');
-      if(importBtn && importInput) importBtn.addEventListener('click', ()=>{ importInput.click(); });
-      if(importInput) importInput.addEventListener('change', e=>{
-        const file = e.target.files[0];
-        if(!file) return;
-        const reader = new FileReader();
-        reader.onload = evt=>{
-          try {
-            const text = evt.target.result;
-            let data;
-            // Try JSON first (old format), then CSV
-            try { data = JSON.parse(text); } catch(e){ data = null; }
-            if(data && data.weekArchive && data.roster){
-              if(!confirm('This replaces everything currently shown with the backup file. Continue?')) return;
-              weekArchive = data.weekArchive;
-              roster = data.roster;
-              targets = Object.assign(targets, data.targets || {});
-              cal = data.cal || cal;
-              const key = weekKey(cal.month, cal.week);
-              scheduleRows = weekArchive[key] ? JSON.parse(JSON.stringify(weekArchive[key].scheduleRows)) : scheduleRows;
-              otHours = weekArchive[key] ? JSON.parse(JSON.stringify(weekArchive[key].otHours || {})) : {};
-              dailySales = weekArchive[key] ? JSON.parse(JSON.stringify(weekArchive[key].dailySales || [null,null,null,null,null,null,null])) : [null,null,null,null,null,null,null];
-              persistCurrent();
-              render();
-              return;
-            }
-            // CSV: just import the roster section so staff are loaded
-            const lines = text.split('\n').map(l=>l.split(',').map(v=>v.replace(/^"|"$/g,'').replace(/""/g,'"')));
-            let inRoster = false, inTargets = false;
-            const newRoster = [], newTargets = {};
-            lines.forEach(cols=>{
-              if(!cols[0]) return;
-              const h = cols[0].toUpperCase();
-              if(h.includes('== ROSTER ==')){ inRoster=true; inTargets=false; return; }
-              if(h.includes('== TARGETS ==')){ inRoster=false; inTargets=true; return; }
-              if(h.includes('== WEEK')){ inRoster=false; inTargets=false; return; }
-              if(inRoster && cols[0] && cols[0]!=='ID' && cols[1]){
-                newRoster.push({ id:cols[0], name:cols[1], role:cols[2]||'PT', status:cols[3]||'active', standardHours:parseFloat(cols[4])||8.5, rate:parseFloat(cols[5])||8.80, note:cols[6]||'' });
-              }
-              if(inTargets && cols[0] && cols[0]!=='Weekly Sales Target'){
-                newTargets.weeklySalesTarget=parseFloat(cols[0])||20000;
-                newTargets.monthlySalesTarget=parseFloat(cols[1])||86600;
-                newTargets.weeklyCap=parseFloat(cols[2])||2900;
-                newTargets.monthlyCap=parseFloat(cols[3])||12586;
-              }
-            });
-            if(newRoster.length===0){ alert('Could not read roster from CSV. Check the file format.'); return; }
-            if(!confirm('Import ' + newRoster.length + ' staff from CSV? This replaces the current roster. Continue?')) return;
-            roster = newRoster;
-            targets = Object.assign(targets, newTargets);
-            scheduleRows = roster.filter(s=>s.status==='active').map(s=>({ id:uid('row'), staffId:s.id, shifts:[0,1,2,3,4,5,6].map(()=>blankShift()) }));
-            otHours = {};
-            dailySales = [null,null,null,null,null,null,null];
-            persistCurrent();
-            render();
-          } catch(err){
-            alert('Could not read that file: ' + err.message);
-          }
-        };
-        reader.readAsText(file);
       });
       root.querySelectorAll('[data-delete-week]').forEach(btn=>{
         btn.addEventListener('click', e=>{
