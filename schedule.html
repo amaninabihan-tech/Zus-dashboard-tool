@@ -977,6 +977,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   let activeTab = 'schedule';
   let importConflicts = null; // when set, shows the "review conflicts" screen instead of the normal schedule
   let weekImportReview = null; // when set, shows the "confirm unmatched names" screen for a Week Import (CSV/Excel)
+  let weekBlockChoice = null; // when set, shows a "pick which week" screen for files with multiple week blocks
 
   const root = document.getElementById('zus-scheduler');
 
@@ -1464,6 +1465,8 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
 
     if(importConflicts){
       html += renderImportConflicts();
+    } else if(weekBlockChoice){
+      html += renderWeekBlockChoice();
     } else if(weekImportReview){
       html += renderWeekImportReview();
     } else if(activeTab==='roster'){
@@ -1525,12 +1528,60 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     return html;
   }
 
+  function renderWeekBlockChoice(){
+    const { blocks } = weekBlockChoice;
+    let html = `
+      <div class="zs-section-title">Choose Which Week To Import</div>
+      <p class="zs-note" style="margin-top:-6px;">This file has ${blocks.length} week blocks in it \u2014 pick the one you want. Only one week can be imported at a time.</p>
+      <div class="zs-table-wrap" style="padding:0;">
+        <table class="zs-roster" style="min-width:0;">
+          <thead><tr><th>Sheet</th><th>Detected Week</th><th>Staff Found</th><th></th></tr></thead>
+          <tbody>
+            ${blocks.map((b, idx) => `
+              <tr>
+                <td>${b.sheetName}</td>
+                <td>${b.dateLabel || b.weekLabel || 'Unknown'}</td>
+                <td>${b.rows.length}</td>
+                <td><button class="zs-mini-btn" data-choose-block="${idx}" style="background:var(--green);">Use this week</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="zs-actions-row" style="margin-top:14px;">
+        <button class="zs-mini-btn ghost" id="zs-week-block-cancel">Cancel</button>
+      </div>
+    `;
+    return html;
+  }
   function renderWeekImportReview(){
     const { parsedRows, weekLabel, dateLabel, resolutions } = weekImportReview;
     const toolCols = getColumns().filter(c=>c.valid);
     const toolWeekLabel = toolCols.map(c=>c.weekday.toUpperCase()+' '+c.dateNum).join(', ');
     const detectedLabel = dateLabel || weekLabel || 'Not detected';
     const dateMismatch = dateLabel && toolWeekLabel && !toolCols.every((c,i)=> dateLabel.includes(' '+c.dateNum) );
+
+    // Build readable day-column headers (e.g. "Mon 13th") from whatever was detected in the file.
+    const dayTokens = (dateLabel || weekLabel || '').split(',').map(t=>t.trim()).filter(Boolean);
+    const dayHeaders = dayTokens.length === 7 ? dayTokens.map(t=>{
+      const m = t.match(/^([A-Za-z]+)\s*(\d+)?$/);
+      if(m){
+        const wd = m[1][0].toUpperCase() + m[1].slice(1,3).toLowerCase();
+        return m[2] ? `${wd} ${ordinal(parseInt(m[2],10))}` : wd;
+      }
+      return t;
+    }) : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+    function resolvedStaff(idx){
+      const val = resolutions[idx];
+      if(val === 'SKIP' || val === 'NEW') return null;
+      return roster.find(s=>s.id===val) || null;
+    }
+    function cellToShiftObj(cell){
+      return { type: cell.code, midStart:600, csHH:cell.csHH||'', csMM:cell.csMM||'', ceHH:cell.ceHH||'', ceMM:cell.ceMM||'', coverDirection:'out', coverNote:'' };
+    }
+    const OFF_LIKE_LABELS = { OFF:'OFF', OFFDAYR:'OFFDAY (R)', AL:'ANNUAL LEAVE', BL:'BIRTHDAY LEAVE', MC:'MC' };
+
     let html = `
       <div class="zs-section-title">Import Preview \u2014 Tally Before You Proceed</div>
       <div class="zs-table-wrap" style="padding:14px 16px; margin-bottom:14px;">
@@ -1538,25 +1589,43 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         <p class="zs-note" style="margin:0;"><b>Currently open in this tool:</b> ${toolWeekLabel} (${MONTH_NAMES[cal.month-1]}, Week ${cal.week}) \u2014 importing will fill in <u>this</u> week. If the dates above don't match, cancel, switch to the correct Month/Week using the controls above, then import again.</p>
         ${dateMismatch ? `<p style="color:var(--red); font-weight:700; font-size:12px; margin:8px 0 0;">\u26a0 The dates detected in the file don't look like they match the week you have open \u2014 double-check before applying.</p>` : ''}
       </div>
-      <div class="zs-table-wrap" style="padding:0;">
-        <table class="zs-roster" style="min-width:0;">
-          <thead><tr><th>Name in file</th><th>Shifts (Mon\u2013Sun)</th><th>Import as</th></tr></thead>
-          <tbody>
-            ${parsedRows.map((pr, idx) => `
-              <tr>
-                <td class="name-cell">${pr.rawName}</td>
-                <td>${pr.shifts.map(s=>s.code + (s.unrecognized?' *':'')).join(', ')}</td>
-                <td><select class="week-import-resolve" data-idx="${idx}">
-                  <option value="SKIP" ${resolutions[idx]==='SKIP'?'selected':''}>-- Skip this row --</option>
-                  <option value="NEW" ${resolutions[idx]==='NEW'?'selected':''}>-- Add as new Part Timer --</option>
-                  ${roster.map(s=>`<option value="${s.id}" ${resolutions[idx]===s.id?'selected':''}>${s.name} (${s.role})</option>`).join('')}
-                </select></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+      <div class="zs-table-wrap">
+      <table class="zs-table">
+        <colgroup>
+          <col style="width:190px;">
+          <col><col><col><col><col><col><col>
+        </colgroup>
+        <thead>
+          <tr class="zs-days"><th class="zs-name-col">Name in File</th>${dayHeaders.map(d=>`<th>${d}</th>`).join('')}</tr>
+        </thead>
+        <tbody>
+          ${parsedRows.map((pr, idx) => {
+            const staff = resolvedStaff(idx);
+            const nameCell = `
+              <div style="font-weight:700;">${pr.rawName}</div>
+              <select class="week-import-resolve" data-idx="${idx}" style="margin-top:6px; width:100%; font-size:11px;">
+                <option value="SKIP" ${resolutions[idx]==='SKIP'?'selected':''}>-- Skip this row --</option>
+                <option value="NEW" ${resolutions[idx]==='NEW'?'selected':''}>-- Add as new Part Timer --</option>
+                ${roster.map(s=>`<option value="${s.id}" ${resolutions[idx]===s.id?'selected':''}>${s.name} (${s.role})</option>`).join('')}
+              </select>
+            `;
+            const cellsHtml = pr.shifts.map(cell => {
+              if(OFF_LIKE_LABELS[cell.code]){
+                return `<td><div class="zs-cell off" style="text-align:center;">${OFF_LIKE_LABELS[cell.code]}</div></td>`;
+              }
+              const h = shiftHours(cellToShiftObj(cell), staff);
+              return `<td><div class="zs-cell" style="text-align:center;">
+                <div style="font-weight:700;">${cell.code}${cell.unrecognized?' *':''}</div>
+                ${h.label ? `<div class="time-label">${h.label}</div>` : ''}
+                ${h.gross>0 ? `<div class="hr-badges"><span class="hr-badge">${h.gross.toFixed(1)}h</span></div>` : ''}
+              </div></td>`;
+            }).join('');
+            return `<tr class="zs-data-row"><td class="zs-name-col">${nameCell}</td>${cellsHtml}</tr>`;
+          }).join('')}
+        </tbody>
+      </table>
       </div>
-      <p class="zs-note" style="margin-top:8px;">* means the file used text this tool didn't recognize as a shift code or time range, and it was set to OFF \u2014 worth checking that row after importing.</p>
+      <p class="zs-note" style="margin-top:8px;">* means the file used text this tool didn't recognize as a shift code or time range, and it was set to OFF \u2014 worth checking that row after importing. Hours shown assume the role picked in the dropdown; picking a different role or "Skip"/"Add as new" may change actual paid hours after import.</p>
     `;
     html += `<div class="zs-actions-row" style="margin-top:14px;">
       <button class="zs-mini-btn" id="zs-week-import-apply" style="background:var(--green);">Apply Import</button>
@@ -1938,7 +2007,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   }
   // Row labels that are summary/meta rows, not staff — real rosters have plenty of these
   // (date rows, task rows, headcount rows, section dividers like "PART TIME").
-  const NON_STAFF_ROW_RE = /^(date|day|task|work ?task|ph\s*\/?\s*event|promotion|cash sales|target sales|sales achieved|actual sales|shift headcount|planned work hour|actual work hour|target productivity|actual productivity|outlet supervisor|outlet leader|full ?time|part ?time|staff|management|finalize|total target)/i;
+  const NON_STAFF_ROW_RE = /^(date|day|task|work ?task|ph\s*\/?\s*event|promotion|cash sales|target sales|sales achieved|actual sales|headcount|shift headcount|planned work hour|actual work hour|target productivity|actual productivity|outlet supervisor|outlet leader|full ?time|part ?time|cover staff|staff|management|finalize|total target)/i;
   // Turns one sheet's raw 2D rows into { rawName, shifts:[7 parsed cells] } entries for just
   // the FIRST week block found in that sheet — bounded by the next weekday-header row, so
   // multiple weeks stacked in one sheet don't get mixed together.
@@ -1954,11 +2023,10 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     }
     return null;
   }
-  function extractWeekRowsFromSheet(rows2D){
-    const headers = findWeekdayHeaderRows(rows2D);
-    if(!headers.length) return { rows: [], weekLabel: null, dateLabel: null };
-    const { rowIdx: headerIdx, cols: dayCols } = headers[0];
-    const boundaryIdx = headers.length > 1 ? headers[1].rowIdx : rows2D.length;
+  // Extracts one week block given its position among the headers found in this sheet.
+  function extractRowsForHeader(rows2D, headers, headerPos){
+    const { rowIdx: headerIdx, cols: dayCols } = headers[headerPos];
+    const boundaryIdx = headers.length > headerPos+1 ? headers[headerPos+1].rowIdx : rows2D.length;
     const nameCol = detectNameColumn(rows2D, headerIdx, boundaryIdx, dayCols);
     const dayTokens = dayCols.filter(c=>c!==-1).map(c => String(rows2D[headerIdx][c]).trim());
     const weekLabel = dayTokens.join(', ');
@@ -1975,12 +2043,31 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     }
     return { rows: out, weekLabel, dateLabel };
   }
+  function extractWeekRowsFromSheet(rows2D){
+    const headers = findWeekdayHeaderRows(rows2D);
+    if(!headers.length) return { rows: [], weekLabel: null, dateLabel: null };
+    return extractRowsForHeader(rows2D, headers, 0);
+  }
   function extractWeekRows(sheets){
     for(const sheet of sheets){
       const { rows, weekLabel, dateLabel } = extractWeekRowsFromSheet(sheet.rows2D);
       if(rows.length) return { rows, sheetName: sheet.name, weekLabel, dateLabel };
     }
     return { rows: [], sheetName: null, weekLabel: null, dateLabel: null };
+  }
+  // Finds every week block across every sheet — used when a file has more than one week
+  // stacked, so the user can pick exactly which one to import instead of always getting
+  // whichever happens to come first.
+  function extractAllWeekBlocks(sheets){
+    const blocks = [];
+    sheets.forEach(sheet => {
+      const headers = findWeekdayHeaderRows(sheet.rows2D);
+      headers.forEach((h, i) => {
+        const { rows, weekLabel, dateLabel } = extractRowsForHeader(sheet.rows2D, headers, i);
+        if(rows.length) blocks.push({ sheetName: sheet.name, rows, weekLabel, dateLabel });
+      });
+    });
+    return blocks;
   }
   function startWeekImportReview(parsedRows, weekLabel, dateLabel){
     const resolutions = parsedRows.map(pr => {
@@ -2425,12 +2512,27 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         const file = e.target.files[0];
         if(!file) return;
         readFileAsSheets(file, sheets => {
-          const { rows: parsedRows, sheetName, weekLabel, dateLabel } = extractWeekRows(sheets);
-          if(!parsedRows.length){ alert('Could not find a Mon\u2013Sun schedule in that file (checked ' + sheets.length + ' sheet(s)). Make sure at least one sheet has a row listing the days of the week, with staff names in the rows below it.'); return; }
-          startWeekImportReview(parsedRows, weekLabel, dateLabel);
+          const blocks = extractAllWeekBlocks(sheets);
+          if(!blocks.length){ alert('Could not find a Mon\u2013Sun schedule in that file (checked ' + sheets.length + ' sheet(s)). Make sure at least one sheet has a row listing the days of the week, with staff names in the rows below it.'); return; }
+          if(blocks.length === 1){
+            startWeekImportReview(blocks[0].rows, blocks[0].weekLabel, blocks[0].dateLabel);
+          } else {
+            weekBlockChoice = { blocks };
+            render();
+          }
         });
         importWeekInput.value = '';
       });
+      root.querySelectorAll('[data-choose-block]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const idx = parseInt(btn.dataset.chooseBlock, 10);
+          const b = weekBlockChoice.blocks[idx];
+          weekBlockChoice = null;
+          startWeekImportReview(b.rows, b.weekLabel, b.dateLabel);
+        });
+      });
+      const weekBlockCancelBtn = document.getElementById('zs-week-block-cancel');
+      if(weekBlockCancelBtn) weekBlockCancelBtn.addEventListener('click', ()=>{ weekBlockChoice = null; render(); });
       const weekImportApplyBtn = document.getElementById('zs-week-import-apply');
       if(weekImportApplyBtn) weekImportApplyBtn.addEventListener('click', ()=>{
         const entries = [];
