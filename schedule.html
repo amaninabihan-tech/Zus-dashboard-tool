@@ -620,12 +620,12 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     const notes = [];
     const lastDay = daysInMonth(month);
     const isEOM = dateNum === lastDay;
-    if(isEOM) notes.push('EOM Stocks Take');
+    if(isEOM) notes.push('EOM Stock Take');
     if(weekdayIdx === 1){ // Monday
       notes.push('Calibration');
       notes.push('Stocks Ordering');
       const mondayDate = new Date(YEAR, month-1, dateNum);
-      if(!shouldSkipWeeklyStockTake(mondayDate)){ notes.push('Weekly Stocks Take'); }
+      if(!shouldSkipWeeklyStockTake(mondayDate)){ notes.push('Weekly Stock Take'); }
     } else if(weekdayIdx === 4){ // Thursday
       notes.push('Calibration');
     } else if(weekdayIdx === 5){ // Friday
@@ -1940,9 +1940,12 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       <div class="zs-actions-row">
         <button class="zs-mini-btn" id="zs-add-row">+ Add Row</button>
         <button class="zs-mini-btn ghost" id="zs-reset-btn">Reset Current Week</button>
-        <button class="zs-mini-btn ghost" id="zs-export-week-btn">Export Week (CSV/Excel)</button>
+        <button class="zs-mini-btn ghost" id="zs-export-week-btn">Export Week (Excel)</button>
         <button class="zs-mini-btn ghost" id="zs-export-all-weeks-btn">Export All Saved Weeks (Stacked)</button>
-        <button class="zs-mini-btn ghost" id="zs-import-week-btn">Import Week (CSV/Excel)</button>
+        <button class="zs-mini-btn ghost" id="zs-import-week-btn">Import Week (Excel)</button>
+        <button class="zs-mini-btn" id="zs-export-week-csv-btn" style="background:var(--green);">Export Week (CSV)</button>
+        <button class="zs-mini-btn" id="zs-import-week-csv-btn" style="background:var(--green);">Import Week (CSV)</button>
+        <input type="file" id="zs-import-week-csv-input" accept=".csv,text/csv" style="display:none"/>
         <input type="file" id="zs-import-week-input" accept=".csv,.xlsx,.xls,text/csv" style="display:none"/>
       </div>
     `;
@@ -2226,8 +2229,14 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   function exportCellText(sh){
     if(sh.type === 'OFF') return 'OFFDAY';
     if(sh.type === 'OFFDAYR') return 'OFFDAY (R)';
-    if(sh.type === 'CUSTOM' || sh.type === 'COVER'){
+    if(sh.type === 'CUSTOM'){
       return to12hLabel(sh.csHH || '09', sh.csMM || '00') + ' - ' + to12hLabel(sh.ceHH || '17', sh.ceMM || '30');
+    }
+    if(sh.type === 'COVER'){
+      const times = to12hLabel(sh.csHH || '09', sh.csMM || '00') + ' - ' + to12hLabel(sh.ceHH || '17', sh.ceMM || '30');
+      const dirLabel = sh.coverDirection === 'in' ? 'COVERING IN' : 'COVERING OUT';
+      const note = (sh.coverNote || '').trim();
+      return `${note ? '(' + note + ') ' : ''}${times} ${dirLabel}`;
     }
     return sh.type;
   }
@@ -2235,7 +2244,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     COLORS: {
       navy: 'FF1B3A6B', navyDark: 'FF0F2748', gold: 'FFD6AD55', cream: 'FFFBF7EE',
       blueBg: 'FFDCE7F7', purple: 'FFE3DBF5', teal: 'FF008080', red: 'FFC23B3B',
-      alGreen: 'FFCDEEE6', white: 'FFFFFFFF'
+      alGreen: 'FFCDEEE6', white: 'FFFFFFFF', steelBlue: 'FF4682B4', deepSeaBlue: 'FF123456'
     },
     FONT_NAME: 'Spectral',
     thinBorder: {
@@ -2253,7 +2262,10 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   // Writes one week's table (title, DATE/DAY, TARGET/SALES/TASK, role sections, headcount)
   // into `ws` starting at row `startRow`. Returns the next free row after this block, so
   // multiple weeks can be stacked one after another in the same sheet.
-  function writeWeekBlock(ws, startRow, month, week, scheduleRowsForWeek, rosterForWeek, dailySalesForWeek){
+  // Recurring short promo codes (shown as compact badges in the live tool) get expanded to
+  // their full readable text in the export, so nothing is left cryptic on a printed sheet.
+  const WEEKLY_NOTE_LABELS = { 'ZDB3F1': 'ZUSDAY BUY3FREE1' };
+  function writeWeekBlock(ws, startRow, month, week, scheduleRowsForWeek, rosterForWeek, dailySalesForWeek, customDayNotesForWeek){
     const { COLORS, FONT_NAME, thinBorder, centered } = XLSX_STYLE;
     const font = (opts) => Object.assign({ name: FONT_NAME }, opts || {});
     const fill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
@@ -2261,6 +2273,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     const columns = getColumnsFor(month, week);
     const staffById = {};
     rosterForWeek.forEach(s => { staffById[s.id] = s; });
+    const dayNotes = customDayNotesForWeek || ['','','','','','',''];
     let r = startRow;
 
     ws.mergeCells(r,2,r,lastCol);
@@ -2285,9 +2298,23 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
 
     row = ws.getRow(r);
     row.getCell(2).value = 'TASK';
-    columns.forEach((c,i)=>{ row.getCell(3+i).value = (c.opNotes && c.opNotes.length) ? c.opNotes.join(' / ') : ''; });
+    columns.forEach((c,i)=>{
+      const parts = [...(c.opNotes || [])];
+      if(c.weeklyNote) parts.push(WEEKLY_NOTE_LABELS[c.weeklyNote] || c.weeklyNote);
+      row.getCell(3+i).value = parts.join(' / ');
+    });
     for(let c=2;c<=lastCol;c++){ const cell=row.getCell(c); cell.fill=fill(COLORS.blueBg); cell.border=thinBorder; cell.alignment=centered; cell.font = font(c===2?{bold:true}:{}); }
-    r += 2;
+    r++;
+
+    // NOTES row — mirrors whatever the manager typed into each day's Notes box in the tool
+    if(dayNotes.some(n => n && n.trim())){
+      row = ws.getRow(r);
+      row.getCell(2).value = 'NOTES';
+      columns.forEach((c,i)=>{ row.getCell(3+i).value = dayNotes[i] || ''; });
+      for(let c=2;c<=lastCol;c++){ const cell=row.getCell(c); cell.fill=fill(COLORS.steelBlue); cell.border=thinBorder; cell.alignment=centered; cell.font = font({ color:{argb:COLORS.white}, bold: c===2 }); }
+      r++;
+    }
+    r++;
 
     SECTION_ORDER.forEach(sec => {
       const rowsForRole = scheduleRowsForWeek.filter(rr => { const st = staffById[rr.staffId]; return st && st.role === sec.role && st.status === 'active'; });
@@ -2308,14 +2335,27 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         nameCell.border = thinBorder;
         rowData.shifts.forEach((sh,i)=>{
           const cell = rr2.getCell(3+i);
-          cell.value = exportCellText(sh);
           cell.border = thinBorder;
           cell.alignment = centered;
           cell.font = font();
-          if(sh.type==='OFF' || sh.type==='OFFDAYR'){ cell.fill = fill(COLORS.purple); }
-          else if(sh.type==='BL'){ cell.fill = fill(COLORS.teal); cell.font = font({ color:{argb:COLORS.white}, bold:true }); }
-          else if(sh.type==='MC'){ cell.fill = fill(COLORS.red); cell.font = font({ color:{argb:COLORS.white}, bold:true }); }
-          else if(sh.type==='AL'){ cell.fill = fill(COLORS.alGreen); }
+          if(sh.type==='COVER'){
+            const times = to12hLabel(sh.csHH || '09', sh.csMM || '00') + ' - ' + to12hLabel(sh.ceHH || '17', sh.ceMM || '30');
+            const dirLabel = sh.coverDirection === 'in' ? 'COVERING IN' : 'COVERING OUT';
+            const note = (sh.coverNote || '').trim();
+            cell.value = {
+              richText: [
+                { text: (note ? '(' + note + ')  ' : '') + times + '\n', font: font({ color:{argb:COLORS.white} }) },
+                { text: dirLabel, font: font({ color:{argb:COLORS.white}, bold:true }) }
+              ]
+            };
+            cell.fill = sh.coverDirection === 'in' ? fill(COLORS.deepSeaBlue) : fill(COLORS.steelBlue);
+          } else {
+            cell.value = exportCellText(sh);
+            if(sh.type==='OFF' || sh.type==='OFFDAYR'){ cell.fill = fill(COLORS.purple); }
+            else if(sh.type==='BL'){ cell.fill = fill(COLORS.teal); cell.font = font({ color:{argb:COLORS.white}, bold:true }); }
+            else if(sh.type==='MC'){ cell.fill = fill(COLORS.red); cell.font = font({ color:{argb:COLORS.white}, bold:true }); }
+            else if(sh.type==='AL'){ cell.fill = fill(COLORS.alGreen); }
+          }
         });
         r++;
       });
@@ -2331,9 +2371,10 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         const st = staffById[rowData.staffId];
         if(!st || st.status !== 'active') return;
         const t = rowData.shifts[di].type;
-        if(t==='M' || t==='C' || t==='MID' || t==='CUSTOM') tally[t] = (tally[t]||0) + 1;
+        const key = t === 'COVER' ? 'COV' : t;
+        if(key==='M' || key==='C' || key==='MID' || key==='CUSTOM' || key==='COV') tally[key] = (tally[key]||0) + 1;
       });
-      row.getCell(3+di).value = ['M','MID','CUSTOM','C'].filter(k=>tally[k]).map(k=>tally[k]+k).join(', ');
+      row.getCell(3+di).value = ['M','MID','CUSTOM','C','COV'].filter(k=>tally[k]).map(k=>tally[k]+k).join(', ');
     });
     for(let c=2;c<=lastCol;c++){ const cell=row.getCell(c); cell.border=thinBorder; cell.alignment=centered; cell.font = font(c===2?{bold:true}:{}); }
 
@@ -2367,8 +2408,16 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       return;
     }
     const { wb, ws } = newStyledWorkbook(`Week ${cal.week} - ${MONTH_NAMES[cal.month-1]}`);
-    writeWeekBlock(ws, 1, cal.month, cal.week, scheduleRows, roster, dailySales);
+    writeWeekBlock(ws, 3, cal.month, cal.week, scheduleRows, roster, dailySales, customDayNotes);
     downloadWorkbook(wb, filename);
+  }
+  // Plain CSV export (no styling library, no colors) — smaller file, useful for quick testing.
+  function exportWeekFileCsv(){
+    const columns = getColumns();
+    const staffById = {};
+    roster.forEach(s => { staffById[s.id] = s; });
+    const filename = `zus_week_${weekKey(cal.month,cal.week)}_${new Date().toISOString().slice(0,10)}`;
+    exportWeekFileCsvFallback(columns, staffById, SECTION_ORDER, filename);
   }
   // Stacks every SAVED week (plus the one currently open) vertically in one sheet, in
   // chronological order, so you get everything "vertically visible" in a single import —
@@ -2391,12 +2440,12 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       ? ascending.slice().reverse() // current week not saved yet (shouldn't happen after persistCurrent, but just in case) — fall back to plain newest-to-oldest
       : [ascending[idx], ...ascending.slice(0, idx).reverse(), ...ascending.slice(idx+1).reverse()];
     const { wb, ws } = newStyledWorkbook('All Weeks');
-    let r = 1;
+    let r = 3;
     keys.forEach(key => {
       const [m, w] = key.split('-').map(Number);
       const wk = weekArchive[key];
       const isCurrent = (m === cal.month && w === cal.week);
-      r = writeWeekBlock(ws, r, m, w, wk.scheduleRows, wk.rosterSnapshot || roster, isCurrent ? dailySales : [null,null,null,null,null,null,null]);
+      r = writeWeekBlock(ws, r, m, w, wk.scheduleRows, wk.rosterSnapshot || roster, isCurrent ? dailySales : [null,null,null,null,null,null,null], isCurrent ? customDayNotes : wk.customDayNotes);
       r++; // extra spacer row between week blocks
     });
     downloadWorkbook(wb, `zus_all_weeks_${new Date().toISOString().slice(0,10)}`);
@@ -2407,7 +2456,14 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     data.push([`${MONTH_NAMES[cal.month-1].toUpperCase()} ${YEAR} (WEEK ${cal.week})`]);
     data.push(['DATE', ...columns.map(c=>c.dateNum)]);
     data.push(['DAY', ...columns.map(c=>c.weekday.toUpperCase())]);
-    data.push(['TASK', ...columns.map(c=>(c.opNotes&&c.opNotes.length)?c.opNotes.join(' / '):'')]);
+    data.push(['TASK', ...columns.map(c=>{
+      const parts = [...(c.opNotes || [])];
+      if(c.weeklyNote) parts.push(WEEKLY_NOTE_LABELS[c.weeklyNote] || c.weeklyNote);
+      return parts.join(' / ');
+    })]);
+    if(customDayNotes.some(n => n && n.trim())){
+      data.push(['NOTES', ...columns.map((c,i)=>customDayNotes[i]||'')]);
+    }
     data.push([]);
     SECTION_ORDER.forEach(sec=>{
       const rowsForRole = scheduleRows.filter(r=>{ const st=staffById[r.staffId]; return st && st.role===sec.role && st.status==='active'; });
@@ -2618,11 +2674,9 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       if(exportWeekBtn) exportWeekBtn.addEventListener('click', ()=>{ exportWeekFile(); });
       const exportAllWeeksBtn = document.getElementById('zs-export-all-weeks-btn');
       if(exportAllWeeksBtn) exportAllWeeksBtn.addEventListener('click', ()=>{ exportAllWeeksFile(); });
-      const importWeekBtn = document.getElementById('zs-import-week-btn');
-      const importWeekInput = document.getElementById('zs-import-week-input');
-      if(importWeekBtn && importWeekInput) importWeekBtn.addEventListener('click', ()=>{ importWeekInput.click(); });
-      if(importWeekInput) importWeekInput.addEventListener('change', e=>{
-        const file = e.target.files[0];
+      const exportWeekCsvBtn = document.getElementById('zs-export-week-csv-btn');
+      if(exportWeekCsvBtn) exportWeekCsvBtn.addEventListener('click', ()=>{ exportWeekFileCsv(); });
+      function handleWeekImportFile(file, inputEl){
         if(!file) return;
         readFileAsSheets(file, sheets => {
           const blocks = extractAllWeekBlocks(sheets);
@@ -2634,8 +2688,16 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
             render();
           }
         });
-        importWeekInput.value = '';
-      });
+        if(inputEl) inputEl.value = '';
+      }
+      const importWeekBtn = document.getElementById('zs-import-week-btn');
+      const importWeekInput = document.getElementById('zs-import-week-input');
+      if(importWeekBtn && importWeekInput) importWeekBtn.addEventListener('click', ()=>{ importWeekInput.click(); });
+      if(importWeekInput) importWeekInput.addEventListener('change', e=>{ handleWeekImportFile(e.target.files[0], importWeekInput); });
+      const importWeekCsvBtn = document.getElementById('zs-import-week-csv-btn');
+      const importWeekCsvInput = document.getElementById('zs-import-week-csv-input');
+      if(importWeekCsvBtn && importWeekCsvInput) importWeekCsvBtn.addEventListener('click', ()=>{ importWeekCsvInput.click(); });
+      if(importWeekCsvInput) importWeekCsvInput.addEventListener('change', e=>{ handleWeekImportFile(e.target.files[0], importWeekCsvInput); });
       root.querySelectorAll('[data-choose-block]').forEach(btn=>{
         btn.addEventListener('click', ()=>{
           const idx = parseInt(btn.dataset.chooseBlock, 10);
