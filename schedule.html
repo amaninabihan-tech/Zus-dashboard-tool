@@ -448,18 +448,14 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   let allStoreData = {};   // { "STATE::OUTLET": { weekArchive, roster, targets, cal } }
 
   function blankRoster(){
-    // A brand new store always starts with a minimum of 4 unassigned staff slots,
-    // ready for the manager to fill in name and role.
-    return [0,1,2,3].map(()=>({
-      id: uid('st'), name:'', role:'PT', status:'active',
-      standardHours:8.5, rate:8.80, maxHours:8.5,
-      note:''
-    }));
+    // Any outlet other than Straits City starts completely empty -- no placeholder slots.
+    // The manager adds staff explicitly via "+ Add Staff" when setting up a new outlet.
+    return [];
   }
   function blankTargets(){
     return {
-      weeklySalesTarget: 20000, monthlySalesTarget: 86600,
-      actualSalesWeekly: '', weeklyCap: 2900, monthlyCap: 12586,
+      weeklySalesTarget: 0, monthlySalesTarget: 0,
+      actualSalesWeekly: '', weeklyCap: 0, monthlyCap: 0,
       dailySales: [null,null,null,null,null,null,null],
     };
   }
@@ -898,21 +894,30 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       try { localStorage.setItem('zus_notes_cleared_v1', '1'); } catch(e){}
     }
 
-    // Migrate legacy single-store data if present and this store has no meaningful roster yet
-    const legacyWeeks = localStorage.getItem('zus_weeks');
-    const legacyRoster = localStorage.getItem('zus_roster');
-    const legacyTargets = localStorage.getItem('zus_targets');
-    const legacyCal = localStorage.getItem('zus_cal');
-    const existingStore = allStoreData[storeKey()];
-    const storeHasData = existingStore && existingStore.roster && existingStore.roster.length > 0;
-    if(!storeHasData && legacyRoster){
-      // Legacy data found — migrate it to this store slot, preserving it
-      allStoreData[storeKey()] = {
-        weekArchive: legacyWeeks ? JSON.parse(legacyWeeks) : {},
-        roster: JSON.parse(legacyRoster),
-        targets: legacyTargets ? JSON.parse(legacyTargets) : {},
-        cal: legacyCal ? JSON.parse(legacyCal) : null,
-      };
+    // Migrate legacy single-store data if present and this store has no meaningful roster yet.
+    // Gated + self-clearing so this can only ever apply once, to the very first store loaded
+    // after upgrading -- it must never bleed old data into a different/new outlet later.
+    if(!localStorage.getItem('zus_legacy_migrated_v1')){
+      const legacyWeeks = localStorage.getItem('zus_weeks');
+      const legacyRoster = localStorage.getItem('zus_roster');
+      const legacyTargets = localStorage.getItem('zus_targets');
+      const legacyCal = localStorage.getItem('zus_cal');
+      const existingStore = allStoreData[storeKey()];
+      const storeHasData = existingStore && existingStore.roster && existingStore.roster.length > 0;
+      if(!storeHasData && legacyRoster){
+        // Legacy data found — migrate it to this store slot, preserving it
+        allStoreData[storeKey()] = {
+          weekArchive: legacyWeeks ? JSON.parse(legacyWeeks) : {},
+          roster: JSON.parse(legacyRoster),
+          targets: legacyTargets ? JSON.parse(legacyTargets) : {},
+          cal: legacyCal ? JSON.parse(legacyCal) : null,
+        };
+      }
+      try {
+        localStorage.removeItem('zus_weeks'); localStorage.removeItem('zus_roster');
+        localStorage.removeItem('zus_targets'); localStorage.removeItem('zus_cal');
+      } catch(e){}
+      try { localStorage.setItem('zus_legacy_migrated_v1', '1'); } catch(e){}
     }
 
     // ── One-time cleanup: keep only Straits City (Penang) data, clear everything else ──
@@ -923,6 +928,21 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       });
       try { localStorage.setItem('zus_all_stores', JSON.stringify(allStoreData)); } catch(e){}
       try { localStorage.setItem('zus_cleanup_straits_v1', '1'); } catch(e){}
+    }
+
+    // ── One-time sweep: any OTHER outlet already sitting in storage (created after the
+    // cleanup above ran, e.g. by just visiting it) gets reset to a genuinely empty roster
+    // and schedule -- no placeholder slots. Straits City's real data is left untouched. ──
+    if(!localStorage.getItem('zus_empty_template_v1')){
+      const keepKey = 'PENANG::Straits City';
+      let anyChanged = false;
+      Object.keys(allStoreData).forEach(k=>{
+        if(k === keepKey) return;
+        allStoreData[k] = { weekArchive: {}, roster: [], targets: blankTargets(), cal: null };
+        anyChanged = true;
+      });
+      if(anyChanged){ try { localStorage.setItem('zus_all_stores', JSON.stringify(allStoreData)); } catch(e){} }
+      try { localStorage.setItem('zus_empty_template_v1', '1'); } catch(e){}
     }
 
     // Load this store's data
@@ -1158,13 +1178,13 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   }
 
   function headcountForDay(di){
-    let m=0, mid=0, c=0, cov=0;
+    let m=0, mid=0, c=0, cov=0, custom=0;
     scheduleRows.forEach(r=>{
       const t = r.shifts[di].type;
       if(t==='M') m++; else if(t==='MID') mid++; else if(t==='C') c++;
-      else if(t==='CUSTOM') mid++; else if(t==='COVER') cov++;
+      else if(t==='CUSTOM') custom++; else if(t==='COVER') cov++;
     });
-    return {m,mid,c,cov};
+    return {m,mid,c,cov,custom};
   }
 
   function validate(columns){
@@ -1258,6 +1278,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
 
   // track which month accordions are open (by "month" number as string key)
   let openMonths = {};
+  let openImportSheets = {};
 
   function renderHistory(){
     const currentKey = weekKey(cal.month, cal.week);
@@ -1550,25 +1571,48 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
 
   function renderWeekBlockChoice(){
     const { blocks } = weekBlockChoice;
+    // Group by sheet name so different outlets/tabs in the same file don't all dump into
+    // one long flat list — same fold/unfold pattern as Schedule History below.
+    const bySheet = {};
+    blocks.forEach((b, idx) => {
+      const key = b.sheetName || '(unnamed sheet)';
+      if(!bySheet[key]) bySheet[key] = [];
+      bySheet[key].push({ ...b, idx });
+    });
+    const sheetNames = Object.keys(bySheet);
     let html = `
       <div class="zs-section-title">Choose Which Week To Import</div>
-      <p class="zs-note" style="margin-top:-6px;">This file has ${blocks.length} week blocks in it \u2014 pick the one you want. Only one week can be imported at a time.</p>
-      <div class="zs-table-wrap" style="padding:0;">
-        <table class="zs-roster" style="min-width:0;">
-          <thead><tr><th>Sheet</th><th>Week</th><th>Dates</th><th>Staff Found</th><th></th></tr></thead>
-          <tbody>
-            ${blocks.map((b, idx) => `
-              <tr>
-                <td>${b.sheetName}</td>
-                <td style="font-weight:700;">${b.titleLabel || '\u2014'}</td>
-                <td>${b.dateLabel || b.weekLabel || 'Unknown'}</td>
-                <td>${b.rows.length}</td>
-                <td><button class="zs-mini-btn" data-choose-block="${idx}" style="background:var(--green);">Use this week</button></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
+      <p class="zs-note" style="margin-top:-6px;">This file has ${blocks.length} week block(s) across ${sheetNames.length} sheet(s) \u2014 tap a sheet to expand it, then pick the week you want. Only one week can be imported at a time.</p>
+    `;
+    sheetNames.forEach(sheetName => {
+      const sheetBlocks = bySheet[sheetName];
+      const isOpen = !!openImportSheets[sheetName];
+      html += `<div class="zs-month-group ${isOpen?'open':''}" data-sheet="${sheetName}">
+        <div class="zs-month-header" data-toggle-sheet="${sheetName}">
+          <div class="zs-month-header-left">
+            <span class="zs-month-chevron">\u203a</span>
+            <span class="zs-month-title">${sheetName}</span>
+            <span class="zs-month-badge">${sheetBlocks.length} week${sheetBlocks.length>1?'s':''}</span>
+          </div>
+        </div>
+        <div class="zs-month-body">
+          <table class="zs-roster" style="min-width:0;">
+            <thead><tr><th>Week</th><th>Dates</th><th>Staff Found</th><th></th></tr></thead>
+            <tbody>
+              ${sheetBlocks.map(b => `
+                <tr>
+                  <td style="font-weight:700;">${b.titleLabel || '\u2014'}</td>
+                  <td>${b.dateLabel || b.weekLabel || 'Unknown'}</td>
+                  <td>${b.rows.length}</td>
+                  <td><button class="zs-mini-btn" data-choose-block="${b.idx}" style="background:var(--green);">Use this week</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    });
+    html += `
       <div class="zs-actions-row" style="margin-top:14px;">
         <button class="zs-mini-btn ghost" id="zs-week-block-cancel">Cancel</button>
       </div>
@@ -1718,6 +1762,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     html += `</tbody></table></div>
       <div class="zs-actions-row">
         <button class="zs-mini-btn" id="zs-add-staff">+ Add Staff</button>
+        <button class="zs-mini-btn ghost" id="zs-reset-roster-btn">Reset Roster</button>
       </div>
       <p class="zs-note">Changing <b>Role</b> resets Rate and Standard Hours to that role's default (RM10.41/8.5h OS, RM8.15/8.5h FT, RM8.80/8.5h PT). Set someone to <b>Inactive</b> when they resign; they drop out of the schedule picker but past records stay intact.<br><br><b>Rules apply by role only. No exceptions for any individual staff.</b><br>OS/FT: every working shift must be 8.5h (red violation if under). Off days are paid (8.5h counted). Break is paid.<br>PT: shifts under 4h = red violation. Under 31.5h/week = amber notice for all PT staff. Off days unpaid. Break deducted (1h if shift 5h+, 30min if under 5h).<br>CS: follows their FT or PT position for all shift and pay rules. Off days unpaid.<br><br><b>OFFDAY (R):</b> requested day off, always unpaid regardless of role. <b>AL:</b> annual leave, paid for OS/FT (8.5h counted), unpaid for PT/CS.</p>
     `;
@@ -1879,7 +1924,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     html += `<tr class="headcount"><td class="zs-name-col">Headcount (M/MID/C/COV/PTS)</td>${columns.map((col,di)=>{
       if(!col.valid) return `<td>—</td>`;
       const h = headcountForDay(di);
-      return `<td>${h.m}M ${h.mid}MID ${h.c}C ${h.cov}COV</td>`;
+      return `<td>${h.m}M ${h.mid}MID ${h.custom}CUSTOM ${h.c}C ${h.cov}COV</td>`;
     }).join('')}<td colspan="3"></td></tr>`;
     html += `<tr><td class="zs-name-col">Daily Salary Cost (RM)</td>${columns.map((col,di)=>{
       if(!col.valid) return `<td>—</td>`;
@@ -1894,9 +1939,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     html += `</tfoot></table></div>
       <div class="zs-actions-row">
         <button class="zs-mini-btn" id="zs-add-row">+ Add Row</button>
-        <button class="zs-mini-btn ghost" id="zs-reset-btn">Reset the Week</button>
-        <button class="zs-mini-btn ghost" id="zs-clear-storage-btn">Clear all saved weeks</button>
-        <button class="zs-mini-btn" id="zs-import-real-btn" style="background:var(--green);">Import Excel Data</button>
+        <button class="zs-mini-btn ghost" id="zs-reset-btn">Reset Current Week</button>
         <button class="zs-mini-btn ghost" id="zs-export-week-btn">Export Week (CSV/Excel)</button>
         <button class="zs-mini-btn ghost" id="zs-export-all-weeks-btn">Export All Saved Weeks (Stacked)</button>
         <button class="zs-mini-btn ghost" id="zs-import-week-btn">Import Week (CSV/Excel)</button>
@@ -2288,9 +2331,9 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         const st = staffById[rowData.staffId];
         if(!st || st.status !== 'active') return;
         const t = rowData.shifts[di].type;
-        if(t==='M' || t==='C' || t==='MID') tally[t] = (tally[t]||0) + 1;
+        if(t==='M' || t==='C' || t==='MID' || t==='CUSTOM') tally[t] = (tally[t]||0) + 1;
       });
-      row.getCell(3+di).value = ['M','MID','C'].filter(k=>tally[k]).map(k=>tally[k]+k).join(', ');
+      row.getCell(3+di).value = ['M','MID','CUSTOM','C'].filter(k=>tally[k]).map(k=>tally[k]+k).join(', ');
     });
     for(let c=2;c<=lastCol;c++){ const cell=row.getCell(c); cell.border=thinBorder; cell.alignment=centered; cell.font = font(c===2?{bold:true}:{}); }
 
@@ -2478,6 +2521,15 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         scheduleRows.push({ id:uid('row'), staffId:id, shifts:[0,1,2,3,4,5,6].map(()=>blankShift()) });
         render();
       });
+      const resetRosterBtn = document.getElementById('zs-reset-roster-btn');
+      if(resetRosterBtn) resetRosterBtn.addEventListener('click', ()=>{
+        if(confirm('Clear the entire Staff Roster for this outlet? This removes every staff member and their current week\'s schedule row. Saved week history is not affected. Continue?')){
+          roster = [];
+          scheduleRows = [];
+          persistCurrent();
+          render();
+        }
+      });
       root.querySelectorAll('[data-remove-staff]').forEach(btn=>{
         btn.addEventListener('click', e=>{
           const id = e.target.dataset.removeStaff;
@@ -2560,18 +2612,6 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
           scheduleRows = scheduleRows.map(r => ({ id: uid('row'), staffId: r.staffId, shifts: [0,1,2,3,4,5,6].map(()=>blankShift()) }));
           persistCurrent();
           render();
-        }
-      });
-      const clearBtn = document.getElementById('zs-clear-storage-btn');
-      if(clearBtn) clearBtn.addEventListener('click', ()=>{
-        if(confirm('This permanently deletes every saved week (current and history) from this browser. Continue?')){
-          try {
-            localStorage.removeItem('zus_weeks'); localStorage.removeItem('zus_roster');
-            localStorage.removeItem('zus_targets'); localStorage.removeItem('zus_cal');
-            localStorage.removeItem('zus_state'); localStorage.removeItem('zus_outlet');
-            localStorage.removeItem('zus_all_stores');
-          } catch(e){}
-          location.reload();
         }
       });
       const exportWeekBtn = document.getElementById('zs-export-week-btn');
@@ -2677,7 +2717,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
           const [m,w] = key.split('-').map(Number);
           if(confirm(`Permanently delete the saved ${MONTH_NAMES[m-1]} Week ${w} schedule? This can't be undone.`)){
             delete weekArchive[key];
-            try { localStorage.setItem('zus_weeks', JSON.stringify(weekArchive)); } catch(err){}
+            try { saveCurrentStoreData(); } catch(err){}
             render();
           }
         });
@@ -2691,6 +2731,18 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
             group.classList.toggle('open', !!openMonths[m]);
             const chevron = group.querySelector('.zs-month-chevron');
             if(chevron) chevron.style.transform = openMonths[m] ? 'rotate(90deg)' : '';
+          }
+        });
+      });
+      root.querySelectorAll('[data-toggle-sheet]').forEach(header=>{
+        header.addEventListener('click', ()=>{
+          const sheetName = header.dataset.toggleSheet;
+          openImportSheets[sheetName] = !openImportSheets[sheetName];
+          const group = root.querySelector(`.zs-month-group[data-sheet="${CSS.escape(sheetName)}"]`);
+          if(group){
+            group.classList.toggle('open', !!openImportSheets[sheetName]);
+            const chevron = group.querySelector('.zs-month-chevron');
+            if(chevron) chevron.style.transform = openImportSheets[sheetName] ? 'rotate(90deg)' : '';
           }
         });
       });
