@@ -117,6 +117,7 @@ table.zs-table tbody tr.zs-section-break td { background: var(--navy-dark); colo
 .zs-cell select.shift-type { width: 100%; font-size: 11px; border: 1px solid var(--line); border-radius: 5px; padding: 2px 3px; font-family: inherit; background: white; }
 .zs-cell.off select.shift-type, .zs-cell.offr select.shift-type, .zs-cell.al select.shift-type { background: #f7f7f5; color: var(--ink-soft); }
 .zs-cell select.mid-start { width: 100%; font-size: 10px; border: 1px solid var(--line); border-radius: 5px; padding: 2px 2px; font-family: inherit; }
+.zs-cell select.m-start, .zs-cell select.c-start { width: 100%; font-size: 10px; border: 1px solid var(--line); border-radius: 5px; padding: 2px 2px; font-family: inherit; }
 .zs-cell .time-pick { display:flex; align-items:center; gap:2px; width:100%; }
 .zs-cell .time-pick select { font-size: 9.5px; border: 1px solid var(--line); border-radius: 5px; padding: 1px 1px; font-family: inherit; }
 .zs-cell .time-pick select.tp-hh { width: 60%; }
@@ -544,6 +545,8 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   const ROLE_ORDER = { OS:0, FT:1, PT:2, CS:3, NONE:4 };
   const ROLE_GROUP_LABEL = { OS:'OUTLET SUPERVISOR', FT:'FULL TIME', PT:'PART TIME', CS:'COVER STAFF', NONE:'UNASSIGNED' };
   const MID_STARTS = [600, 660, 720]; // 10:00, 11:00, 12:00 in minutes
+  const M_STARTS = [390, 510, 570]; // 06:30, 08:30, 09:30 in minutes, listed earliest-to-latest -- all 8.5h shifts, just shifted earlier/later
+  const C_STARTS = [840, 900, 960]; // 14:00, 15:00, 16:00 in minutes, listed earliest-to-latest -- all 8.5h shifts, just shifted earlier/later
   const M_START = 510, M_END = 1020;   // 08:30 to 17:00
   const C_START = 840, C_END = 1350;   // 14:00 to 22:30
 
@@ -661,7 +664,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     { id:'st_kaylee', name:'Kaylee', role:'PT', status:'active', standardHours:8.5, rate:8.80, note:'' },
   ];
 
-  function blankShift(){ return { type:'OFF', midStart: 600, csHH:'', csMM:'', ceHH:'', ceMM:'', coverNote:'', coverDirection:'out' }; }
+  function blankShift(){ return { type:'OFF', midStart: 600, mStart: 510, cStart: 840, csHH:'', csMM:'', ceHH:'', ceMM:'', coverNote:'', coverDirection:'out' }; }
 
   // ---------- SCHEDULE ROWS (7 column slots, relabelled by the calendar picker) ----------
   let scheduleRows = [
@@ -948,6 +951,18 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     // Load this store's data
     loadStoreData(storeKey());
 
+    // Silently heal any schedule rows left pointing at a deleted staff ID (e.g. from
+    // before the Remove-Staff fix below existed) -- runs every load, cheap no-op if
+    // nothing needs fixing, never shows a popup.
+    repairOrphanedStaffIds();
+
+    // Targeted fix for JULY 2026 (WEEK 3) specifically, using real known-good data from
+    // the manager's actual Excel export -- only for Straits City, only if that week still
+    // has rows the general repair above couldn't recover a name for.
+    if(storeKey() === 'PENANG::Straits City'){
+      repairJulyWeek3FromKnownData();
+    }
+
     // ── One-time migration: PTS1/PTS2 no longer exist as shift types -- convert any
     // saved entries (in every saved week, plus the currently loaded week) into CUSTOM
     // shifts carrying the exact same hours they used to represent, instead of losing them. ──
@@ -1018,6 +1033,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   let importConflicts = null; // when set, shows the "review conflicts" screen instead of the normal schedule
   let weekImportReview = null; // when set, shows the "confirm unmatched names" screen for a Week Import (CSV/Excel)
   let weekBlockChoice = null; // when set, shows a "pick which week" screen for files with multiple week blocks
+  let batchImportPreview = null; // when set, shows a review screen for multi-week batch import before anything is applied
 
   const root = document.getElementById('zus-scheduler');
 
@@ -1090,8 +1106,8 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       // Medical Certificate Leave: unpaid for everyone
       return { gross:0, paid:0, label:'MC', paidOff:false };
     }
-    if(shift.type==='M'){ const g=(M_END-M_START)/60; return { gross:g, paid:paidHoursFor(g,role,staff), label: labelRange(M_START,M_END) }; }
-    if(shift.type==='C'){ const g=(C_END-C_START)/60; return { gross:g, paid:paidHoursFor(g,role,staff), label: labelRange(C_START,C_END) }; }
+    if(shift.type==='M'){ const start = (shift.mStart!=null ? shift.mStart : M_START); const end = start + (M_END-M_START); return { gross:(M_END-M_START)/60, paid:paidHoursFor((M_END-M_START)/60,role,staff), label: labelRange(start,end) }; }
+    if(shift.type==='C'){ const start = (shift.cStart!=null ? shift.cStart : C_START); const end = start + (C_END-C_START); return { gross:(C_END-C_START)/60, paid:paidHoursFor((C_END-C_START)/60,role,staff), label: labelRange(start,end) }; }
     if(shift.type==='MID'){
       const stdH = staff ? staff.standardHours : 8.5;
       const start = shift.midStart;
@@ -1279,6 +1295,9 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   // track which month accordions are open (by "month" number as string key)
   let openMonths = {};
   let openImportSheets = {};
+  let openRosterSheets = {};
+  let rosterImportOutlets = null; // when set, shows the foldable outlet picker for importing staff only
+  let rosterImportPreview = null; // when set, shows the review screen for staff about to be added
 
   function renderHistory(){
     const currentKey = weekKey(cal.month, cal.week);
@@ -1508,6 +1527,12 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       html += renderImportConflicts();
     } else if(weekBlockChoice){
       html += renderWeekBlockChoice();
+    } else if(rosterImportOutlets){
+      html += renderRosterImportOutlets();
+    } else if(rosterImportPreview){
+      html += renderRosterImportPreview();
+    } else if(batchImportPreview){
+      html += renderBatchImportPreview();
     } else if(weekImportReview){
       html += renderWeekImportReview();
     } else if(activeTab==='roster'){
@@ -1569,6 +1594,80 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     return html;
   }
 
+  // Parses this tool's own "JULY 2026 (WEEK 3)" title format into an exact month+week, so
+  // multi-select batch import can route each week to the right place automatically.
+  function parseTitleToMonthWeek(titleLabel){
+    if(!titleLabel) return null;
+    const m = titleLabel.match(/([A-Za-z]+)\s+\d{4}\s*\(?\s*WEEK\s*(\d+)\s*\)?/i);
+    if(!m) return null;
+    const monthIdx = MONTH_NAMES.findIndex(mn => mn.toLowerCase() === m[1].toLowerCase());
+    if(monthIdx === -1) return null;
+    return { month: monthIdx+1, week: parseInt(m[2], 10) };
+  }
+  function renderRosterImportOutlets(){
+    const { blocksBySheet } = rosterImportOutlets;
+    const sheetNames = Object.keys(blocksBySheet);
+    let html = `
+      <div class="zs-section-title">Import Staff \u2014 Choose Outlet</div>
+      <p class="zs-note" style="margin-top:-6px;">This file has ${sheetNames.length} outlet(s) \u2014 tap one to expand it, then pick the outlet whose staff you want to add. Only the latest week block for each outlet is used, so you won't see old or unwanted names. This only imports names and roles \u2014 no schedule data yet.</p>
+    `;
+    sheetNames.forEach(sheetName => {
+      const block = blocksBySheet[sheetName];
+      const isOpen = !!openRosterSheets[sheetName];
+      html += `<div class="zs-month-group ${isOpen?'open':''}" data-roster-sheet="${sheetName}">
+        <div class="zs-month-header" data-toggle-roster-sheet="${sheetName}">
+          <div class="zs-month-header-left">
+            <span class="zs-month-chevron">\u203a</span>
+            <span class="zs-month-title">${sheetName}</span>
+            <span class="zs-month-badge">${block.rows.length} staff \u2014 ${block.titleLabel || block.dateLabel || block.weekLabel || 'latest week'}</span>
+          </div>
+        </div>
+        <div class="zs-month-body">
+          <p class="zs-note" style="margin:0 0 10px;">${block.rows.map(r=>r.rawName).join(', ')}</p>
+          <button class="zs-mini-btn" data-choose-roster-outlet="${sheetName}" style="background:var(--green);">Use this outlet</button>
+        </div>
+      </div>`;
+    });
+    html += `<div class="zs-actions-row" style="margin-top:14px;">
+      <button class="zs-mini-btn ghost" id="zs-roster-import-cancel-outlets">Cancel</button>
+    </div>`;
+    return html;
+  }
+  function renderRosterImportPreview(){
+    const { sheetName, staffList } = rosterImportPreview;
+    let html = `
+      <div class="zs-section-title">Import Staff \u2014 ${sheetName}</div>
+      <p class="zs-note" style="margin-top:-6px;">Found ${staffList.length} unique staff member(s). Review roles below, then confirm to add them to your roster. Names already in your roster are shown but won't be duplicated.</p>
+      <div class="zs-table-wrap" style="padding:0;">
+      <table class="zs-roster" style="min-width:0;">
+        <thead><tr><th>Name</th><th>Role</th><th>Status</th></tr></thead>
+        <tbody>
+          ${staffList.map((s, idx) => `
+            <tr>
+              <td class="name-cell">${s.rawName}</td>
+              <td>${s.existing
+                ? `${roleLabel(s.existing.role)} <span class="zs-note">(existing)</span>`
+                : `<select class="roster-import-role" data-idx="${idx}">
+                    <option value="OS" ${s.role==='OS'?'selected':''}>Outlet Supervisor</option>
+                    <option value="FT" ${s.role==='FT'?'selected':''}>Full Timer</option>
+                    <option value="CS" ${s.role==='CS'?'selected':''}>Cover Staff</option>
+                    <option value="PT" ${s.role==='PT'?'selected':''}>Part Timer</option>
+                  </select>${!s.roleDetected ? `<div class="zs-note" style="font-size:10px; color:var(--amber);">Role not detected \u2014 please confirm</div>` : ''}`
+              }</td>
+              <td>${s.existing ? `<span style="color:var(--navy);">Already in roster \u2014 skipped</span>` : `<span style="color:var(--amber); font-weight:600;">Will be added</span>`}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      </div>
+    `;
+    html += `<div class="zs-actions-row" style="margin-top:14px;">
+      <button class="zs-mini-btn" id="zs-roster-import-apply" style="background:var(--green);">Add Staff To Roster</button>
+      <button class="zs-mini-btn ghost" id="zs-roster-import-back">Back</button>
+      <button class="zs-mini-btn ghost" id="zs-roster-import-cancel">Cancel</button>
+    </div>`;
+    return html;
+  }
   function renderWeekBlockChoice(){
     const { blocks } = weekBlockChoice;
     // Group by sheet name so different outlets/tabs in the same file don't all dump into
@@ -1577,12 +1676,13 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     blocks.forEach((b, idx) => {
       const key = b.sheetName || '(unnamed sheet)';
       if(!bySheet[key]) bySheet[key] = [];
-      bySheet[key].push({ ...b, idx });
+      bySheet[key].push({ ...b, idx, target: parseTitleToMonthWeek(b.titleLabel) });
     });
     const sheetNames = Object.keys(bySheet);
+    const anyBatchable = blocks.some((b,idx) => parseTitleToMonthWeek(b.titleLabel));
     let html = `
       <div class="zs-section-title">Choose Which Week To Import</div>
-      <p class="zs-note" style="margin-top:-6px;">This file has ${blocks.length} week block(s) across ${sheetNames.length} sheet(s) \u2014 tap a sheet to expand it, then pick the week you want. Only one week can be imported at a time.</p>
+      <p class="zs-note" style="margin-top:-6px;">This file has ${blocks.length} week block(s) across ${sheetNames.length} sheet(s) \u2014 tap a sheet to expand it. Click "Use this week" to import one now, or check the box on multiple weeks (where available) and use "Import Selected Weeks" below to bring in several at once.</p>
     `;
     sheetNames.forEach(sheetName => {
       const sheetBlocks = bySheet[sheetName];
@@ -1597,11 +1697,12 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         </div>
         <div class="zs-month-body">
           <table class="zs-roster" style="min-width:0;">
-            <thead><tr><th>Week</th><th>Dates</th><th>Staff Found</th><th></th></tr></thead>
+            <thead><tr><th style="width:36px;"></th><th>Week</th><th>Dates</th><th>Staff Found</th><th></th></tr></thead>
             <tbody>
               ${sheetBlocks.map(b => `
                 <tr>
-                  <td style="font-weight:700;">${b.titleLabel || '\u2014'}</td>
+                  <td>${b.target ? `<input type="checkbox" class="week-block-select" data-idx="${b.idx}">` : ''}</td>
+                  <td style="font-weight:700;">${b.titleLabel || '\u2014'}${!b.target ? ' <span class="zs-note" style="font-weight:400;">(single-import only \u2014 can\'t auto-detect exact week)</span>' : ''}</td>
                   <td>${b.dateLabel || b.weekLabel || 'Unknown'}</td>
                   <td>${b.rows.length}</td>
                   <td><button class="zs-mini-btn" data-choose-block="${b.idx}" style="background:var(--green);">Use this week</button></td>
@@ -1614,9 +1715,97 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     });
     html += `
       <div class="zs-actions-row" style="margin-top:14px;">
+        ${anyBatchable ? `<button class="zs-mini-btn" id="zs-week-block-import-selected" style="background:var(--green);">Import Selected Weeks</button>` : ''}
         <button class="zs-mini-btn ghost" id="zs-week-block-cancel">Cancel</button>
       </div>
     `;
+    return html;
+  }
+  // Builds readable day-column headers (e.g. "Mon 13th") from whatever was detected in a file.
+  function buildDayHeaders(dateLabel, weekLabel){
+    const dayTokens = (dateLabel || weekLabel || '').split(',').map(t=>t.trim()).filter(Boolean);
+    return dayTokens.length === 7 ? dayTokens.map(t=>{
+      const m = t.match(/^([A-Za-z]+)\s*(\d+)?$/);
+      if(m){
+        const wd = m[1][0].toUpperCase() + m[1].slice(1,3).toLowerCase();
+        return m[2] ? `${wd} ${ordinal(parseInt(m[2],10))}` : wd;
+      }
+      return t;
+    }) : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  }
+  function renderBatchImportPreview(){
+    const { weeks } = batchImportPreview;
+    const OFF_LIKE_LABELS = { OFF:'OFF', OFFDAYR:'OFFDAY (R)', AL:'ANNUAL LEAVE', BL:'BIRTHDAY LEAVE', MC:'MC' };
+    let html = `
+      <div class="zs-section-title">Batch Import Preview \u2014 Tally Before You Proceed</div>
+      <p class="zs-note" style="margin-top:-6px;">Importing ${weeks.length} week(s), applied earliest first. For every name, pick who they match to, skip the row, or add them as new staff \u2014 the schedule below updates live as you choose.</p>
+    `;
+    weeks.forEach((w, wi) => {
+      const dayHeaders = buildDayHeaders(w.dateLabel, w.weekLabel);
+      html += `
+        <div class="zs-table-wrap" style="margin-bottom:18px; padding:0;">
+        <table class="zs-table">
+          <colgroup><col style="width:210px;"><col><col><col><col><col><col><col></colgroup>
+          <thead>
+            <tr><th colspan="8" style="background:var(--navy); color:#fff; text-align:center; font-size:13px; letter-spacing:0.03em;">${w.titleLabel || (MONTH_NAMES[w.target.month-1]+' Week '+w.target.week)}</th></tr>
+            <tr class="zs-days"><th class="zs-name-col">Name in File</th>${dayHeaders.map(d=>`<th>${d}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${w.rows.map((pr, ri) => {
+              const val = w.resolutions[ri];
+              let staffForHours = null;
+              if(val === 'NEW'){
+                const role = pr.detectedRole || pr.chosenRole || 'PT';
+                staffForHours = { role, standardHours: ROLE_DEFAULTS[role].standardHours };
+              } else if(val !== 'SKIP'){
+                staffForHours = roster.find(x=>x.id===val) || null;
+              }
+              const nameCell = `
+                <div style="font-weight:700;">${pr.rawName}</div>
+                <select class="batch-week-resolve" data-week="${wi}" data-row="${ri}" style="margin-top:6px; width:100%; font-size:11px;">
+                  <option value="SKIP" ${val==='SKIP'?'selected':''}>Skip This Row</option>
+                  <option value="NEW" ${val==='NEW'?'selected':''}>Add as New Staff</option>
+                  ${roster.map(s=>`<option value="${s.id}" ${val===s.id?'selected':''}>${s.name} (${s.role})</option>`).join('')}
+                </select>
+                ${val==='NEW' ? (
+                  pr.detectedRole
+                    ? `<div class="zs-note" style="margin-top:4px; font-size:10.5px;">Role from file: <b>${roleLabel(pr.detectedRole)}</b></div>`
+                    : `<select class="batch-week-role" data-week="${wi}" data-row="${ri}" style="margin-top:4px; width:100%; font-size:11px;">
+                        <option value="OS" ${pr.chosenRole==='OS'?'selected':''}>Outlet Supervisor</option>
+                        <option value="FT" ${pr.chosenRole==='FT'?'selected':''}>Full Timer</option>
+                        <option value="CS" ${pr.chosenRole==='CS'?'selected':''}>Cover Staff</option>
+                        <option value="PT" ${!pr.chosenRole || pr.chosenRole==='PT'?'selected':''}>Part Timer</option>
+                      </select>
+                      <div class="zs-note" style="margin-top:2px; font-size:10px; color:var(--amber);">Role not detected \u2014 please confirm</div>`
+                ) : ''}
+              `;
+              const cellsHtml = val === 'SKIP'
+                ? pr.shifts.map(()=> `<td><div class="zs-cell off" style="text-align:center;">\u2014</div></td>`).join('')
+                : pr.shifts.map(cell => {
+                    if(OFF_LIKE_LABELS[cell.code]){
+                      return `<td><div class="zs-cell off" style="text-align:center;">${OFF_LIKE_LABELS[cell.code]}</div></td>`;
+                    }
+                    const shiftObj = { type: cell.code, midStart:600, csHH:cell.csHH||'', csMM:cell.csMM||'', ceHH:cell.ceHH||'', ceMM:cell.ceMM||'', coverDirection:'out', coverNote:'' };
+                    const h = shiftHours(shiftObj, staffForHours);
+                    return `<td><div class="zs-cell" style="text-align:center;">
+                      <div style="font-weight:700;">${cell.code}${cell.unrecognized?' *':''}</div>
+                      ${h.label ? `<div class="time-label">${h.label}</div>` : ''}
+                      ${h.gross>0 ? `<div class="hr-badges"><span class="hr-badge">${h.gross.toFixed(1)}h</span></div>` : ''}
+                    </div></td>`;
+                  }).join('');
+              return `<tr class="zs-data-row"><td class="zs-name-col">${nameCell}</td>${cellsHtml}</tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        </div>
+      `;
+    });
+    html += `<p class="zs-note" style="margin-top:-8px; margin-bottom:8px;">* means the file used text this tool didn't recognize as a shift code or time range, and it was set to OFF \u2014 worth checking after importing.</p>`;
+    html += `<div class="zs-actions-row" style="margin-top:14px;">
+      <button class="zs-mini-btn ghost" id="zs-batch-add-all-new">Add Unassigned Names to Staff Roster</button>
+      <button class="zs-mini-btn" id="zs-batch-import-apply" style="background:var(--green);">Confirm &amp; Import All</button>
+      <button class="zs-mini-btn ghost" id="zs-batch-import-cancel">Cancel</button>
+    </div>`;
     return html;
   }
   function renderWeekImportReview(){
@@ -1763,6 +1952,10 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       <div class="zs-actions-row">
         <button class="zs-mini-btn" id="zs-add-staff">+ Add Staff</button>
         <button class="zs-mini-btn ghost" id="zs-reset-roster-btn">Reset Roster</button>
+        <button class="zs-mini-btn" id="zs-import-staff-btn" style="background:var(--green);">Import Staff From File</button>
+        <input type="file" id="zs-import-staff-input" accept=".csv,.xlsx,.xls,text/csv" style="display:none"/>
+        <button class="zs-mini-btn ghost" id="zs-repair-from-file-btn">Repair Broken Weeks From File</button>
+        <input type="file" id="zs-repair-from-file-input" accept=".csv,.xlsx,.xls,text/csv" style="display:none"/>
       </div>
       <p class="zs-note">Changing <b>Role</b> resets Rate and Standard Hours to that role's default (RM10.41/8.5h OS, RM8.15/8.5h FT, RM8.80/8.5h PT). Set someone to <b>Inactive</b> when they resign; they drop out of the schedule picker but past records stay intact.<br><br><b>Rules apply by role only. No exceptions for any individual staff.</b><br>OS/FT: every working shift must be 8.5h (red violation if under). Off days are paid (8.5h counted). Break is paid.<br>PT: shifts under 4h = red violation. Under 31.5h/week = amber notice for all PT staff. Off days unpaid. Break deducted (1h if shift 5h+, 30min if under 5h).<br>CS: follows their FT or PT position for all shift and pay rules. Off days unpaid.<br><br><b>OFFDAY (R):</b> requested day off, always unpaid regardless of role. <b>AL:</b> annual leave, paid for OS/FT (8.5h counted), unpaid for PT/CS.</p>
     `;
@@ -1796,8 +1989,8 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   function renderSchedule(columns, violations, notices, totalCost){
     let html = `
       <div class="zs-shift-key">
-        <span><b>M</b> Morning 08:30 to 17:00</span>
-        <span><b>C</b> Closing 14:00 to 22:30</span>
+        <span><b>M</b> Morning \u2014 starts 06:30 / 08:30 / 09:30, always 8.5h</span>
+        <span><b>C</b> Closing \u2014 starts 14:00 / 15:00 / 16:00, always 8.5h</span>
         <span><b>MID</b> starts 10:00/11:00/12:00, ends after the staff's standard daily hours</span>
         <span><b>CUSTOM</b> pick any hour (AM/PM) + :00/:30, blank until you set it — minimum 4h</span>
         <span><b>COVER</b> covering another outlet, or a guest staff covering ours — same hour + :00/:30 picker</span>
@@ -1894,6 +2087,12 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
           ${(mc) ? `<span class="time-label" style="color:white;">unpaid</span>` : ''}
           ${sh.type==='MID' ? `<select class="mid-start" data-row="${row.id}" data-day="${di}">
               ${MID_STARTS.map(ms=>`<option value="${ms}" ${sh.midStart===ms?'selected':''}>${minToLabel(ms)}</option>`).join('')}
+            </select>` : ''}
+          ${sh.type==='M' ? `<select class="m-start" data-row="${row.id}" data-day="${di}">
+              ${M_STARTS.map(ms=>`<option value="${ms}" ${(sh.mStart!=null?sh.mStart:510)===ms?'selected':''}>${minToLabel(ms)}</option>`).join('')}
+            </select>` : ''}
+          ${sh.type==='C' ? `<select class="c-start" data-row="${row.id}" data-day="${di}">
+              ${C_STARTS.map(ms=>`<option value="${ms}" ${(sh.cStart!=null?sh.cStart:840)===ms?'selected':''}>${minToLabel(ms)}</option>`).join('')}
             </select>` : ''}
           ${(sh.type==='CUSTOM') ? timePickHtml(row.id, di, 'csHH', sh.csHH, 'csMM', sh.csMM) + timePickHtml(row.id, di, 'ceHH', sh.ceHH, 'ceMM', sh.ceMM) : ''}
           ${(sh.type==='COVER') ? `
@@ -2088,7 +2287,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   }
   // Row labels that are summary/meta rows, not staff — real rosters have plenty of these
   // (date rows, task rows, headcount rows, section dividers like "PART TIME").
-  const NON_STAFF_ROW_RE = /^(date|day|task|work ?task|ph\s*\/?\s*event|promotion|cash sales|target sales|sales achieved|actual sales|headcount|shift headcount|planned work hour|actual work hour|target productivity|actual productivity|outlet supervisor|outlet leader|full ?time|part ?time|cover staff|staff|management|finalize|total target)/i;
+  const NON_STAFF_ROW_RE = /^(date|day|task|work ?task|ph\s*\/?\s*event|promotion|cash sales|target sales|sales achieved|actual sales|headcount|shift headcount|planned work hour|actual work hour|total work hour|work hour|labour productivity|labor productivity|target productivity|actual productivity|outlet supervisor|outlet leader|full ?time|part ?time|cover staff|staff|management|finalize|total target|key holder|weekly task|monthly task|cleaning task)/i;
   // Turns one sheet's raw 2D rows into { rawName, shifts:[7 parsed cells] } entries for just
   // the FIRST week block found in that sheet — bounded by the next weekday-header row, so
   // multiple weeks stacked in one sheet don't get mixed together.
@@ -2121,13 +2320,23 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   const SECTION_ROLE_PATTERNS = [
     { re: /^outlet supervisor/i, role: 'OS' },
     { re: /^outlet leader/i, role: 'OS' },
-    { re: /^full ?time/i, role: 'FT' },
+    { re: /^supervisor/i, role: 'OS' },
+    { re: /^full[\s-]?time/i, role: 'FT' },
     { re: /^cover staff/i, role: 'CS' },
-    { re: /^part ?time/i, role: 'PT' }
+    { re: /^par\s*-?\s*t?\s*-?\s*time/i, role: 'PT' }
   ];
   function detectSectionRole(name){
     const hit = SECTION_ROLE_PATTERNS.find(p => p.re.test(name));
     return hit ? hit.role : null;
+  }
+  // Strips emoji/decorative symbols some managers add to staff names in their sheets
+  // (e.g. "WANIEE BLOODRUSH🦇") so the stored name and matching stay clean and consistent.
+  function cleanStaffName(raw){
+    return String(raw==null?'':raw)
+      .replace(/\([^)]*\)/g, '') // drop parenthetical notes like "(TRAINING WEEK)"
+      .replace(/[^A-Za-z0-9\s'\-]/g, '') // keep only basic Latin letters/numbers/spaces/apostrophe/hyphen -- strips emoji AND decorative Unicode symbols/scripts that fall outside standard emoji ranges
+      .replace(/\s+/g, ' ')
+      .trim();
   }
   function extractRowsForHeader(rows2D, headers, headerPos){
     const { rowIdx: headerIdx, cols: dayCols } = headers[headerPos];
@@ -2142,13 +2351,14 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     let currentSectionRole = null; // updates as we pass each "OUTLET SUPERVISOR"/"FULLTIME"/etc section row
     for(let r = headerIdx+1; r < boundaryIdx; r++){
       const row = rows2D[r] || [];
-      const name = String(row[nameCol]==null?'':row[nameCol]).trim();
+      const name = cleanStaffName(row[nameCol]);
       if(!name) continue;
+      if(/\bweek\s*\d+\b/i.test(name) || /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}\b/i.test(name)) break; // wandered into the next week block's title row -- stop here entirely
       const sectionRole = detectSectionRole(name);
       if(sectionRole){ currentSectionRole = sectionRole; continue; } // this row IS a section header, not a person
+      if(!currentSectionRole) continue; // not yet under a recognized role section (e.g. task/promo/date rows) -- skip
       if(NON_STAFF_ROW_RE.test(name)) continue;
       const dayVals = dayCols.map(ci => ci===-1 ? '' : String(row[ci]==null?'':row[ci]).trim());
-      if(!dayVals.some(v=>v)) continue; // no schedule data on this row, skip
       out.push({ rawName: name, shifts: dayVals.map(v => parseShiftCell(v)), detectedRole: currentSectionRole });
     }
     return { rows: out, weekLabel, dateLabel, titleLabel };
@@ -2188,7 +2398,208 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     weekImportReview = { parsedRows, weekLabel, dateLabel, titleLabel, resolutions, forceShowAll: [] };
     render();
   }
-  function applyWeekImport(entries){
+  // Fixes schedule rows across every saved week (and the currently open one) that point
+  // to a staffId no longer in the live roster -- e.g. after deleting a duplicate staff
+  // record by hand. Uses each week's own frozen rosterSnapshot to recover the name that
+  // orphaned ID used to belong to, then re-matches that name to a real current staff
+  // member and re-links the row to them, instead of leaving it stuck as "(unassigned)".
+  function repairOrphanedStaffIds(){
+    let fixedCount = 0;
+    const recreatedByName = {}; // normName -> newly recreated staffId, so the same missing person isn't recreated twice
+    function repairRows(rows, snapshot){
+      (rows || []).forEach(row => {
+        if(roster.some(s => s.id === row.staffId)) return; // fine, still exists
+        const snapStaff = (snapshot || []).find(s => s.id === row.staffId);
+        if(!snapStaff) return; // no name on record anywhere for this ID -- nothing we can recover
+        const match = matchStaffByName(snapStaff.name);
+        if(match){ row.staffId = match.id; fixedCount++; return; }
+        const key = normName(snapStaff.name);
+        if(recreatedByName[key]){ row.staffId = recreatedByName[key]; fixedCount++; return; }
+        // No one in the live roster matches this name at all -- restore them using
+        // whatever role/rate/hours that week's own snapshot remembered for them.
+        const role = snapStaff.role || 'PT';
+        const restored = {
+          id: uid('st'), name: snapStaff.name, role,
+          status: 'active',
+          standardHours: snapStaff.standardHours || ROLE_DEFAULTS[role].standardHours,
+          rate: snapStaff.rate || ROLE_DEFAULTS[role].rate,
+          note: snapStaff.note || ''
+        };
+        roster.push(restored);
+        recreatedByName[key] = restored.id;
+        row.staffId = restored.id;
+        fixedCount++;
+      });
+    }
+    Object.values(weekArchive).forEach(wk => repairRows(wk.scheduleRows, wk.rosterSnapshot));
+    // Also repair the LIVE currently-open week -- if it's already been saved before, its
+    // own snapshot (same key) is exactly what was used to load these rows in the first place.
+    const currentKey = weekKey(cal.month, cal.week);
+    const currentSnapshot = weekArchive[currentKey] ? weekArchive[currentKey].rosterSnapshot : null;
+    repairRows(scheduleRows, currentSnapshot);
+    if(fixedCount > 0) saveCurrentStoreData();
+    return fixedCount;
+  }
+  // Known-correct source data for JULY 2026 (WEEK 3) -- taken directly from the manager's
+  // real Straits City Excel export, used to auto-heal any rows in that specific week that
+  // still have no recoverable name (i.e. the general repair above found nothing to go on).
+  // This runs through the exact same parsing/matching pipeline as a normal file import.
+  const JULY_WEEK3_KNOWN_DATA = [
+    { name: 'NURAINA', role: 'OS', shifts: ['C','MID','M','M','M','OFFDAY','C'] },
+    { name: 'WANI', role: 'FT', shifts: ['M','M','M','C','OFFDAY','C','MID'] },
+    { name: 'NABIHAN', role: 'FT', shifts: ['C','C','C','OFFDAY','M','M','M'] },
+    { name: 'ARSHA', role: 'PT', shifts: ['7.00PM - 10.30PM','7.00PM - 10.30PM','OFFDAY','7.00PM - 10.30PM','7.00PM - 10.30PM','10.00AM - 4.00 PM','OFFDAY'] },
+    { name: 'FITRAH', role: 'PT', shifts: ['OFFDAY','OFFDAY','OFFDAY','OFFDAY','OFFDAY','C','C'] },
+    { name: 'IMAN', role: 'PT', shifts: ['M','8.30 AM - 3.00 PM','OFFDAY','M','MID','OFFDAY','2.00PM - 7.00PM'] },
+    { name: 'LYANA', role: 'PT', shifts: ['OFFDAY','OFFDAY','06.30PM - 10.30PM','06.30PM - 10.30PM','06.30PM - 10.30PM','OFFDAY','4.00PM - 10.30PM'] },
+    { name: 'KAYLEE', role: 'PT', shifts: ['OFFDAY','OFF','OFF','OFF','OFF','0830AM - 0200PM','0830AM - 0200PM'] }
+  ];
+  function repairJulyWeek3FromKnownData(){
+    const wk = weekArchive['7-3'];
+    const isCurrent = (cal.month === 7 && cal.week === 3);
+    const rowsToCheck = isCurrent ? scheduleRows : (wk ? wk.scheduleRows : null);
+    if(!rowsToCheck) return false; // this week doesn't exist yet in this browser at all -- nothing to repair
+    const stillBroken = rowsToCheck.some(row => row.staffId && !roster.some(s=>s.id===row.staffId));
+    if(!stillBroken) return false; // already fine (either never broken, or already fixed above)
+    const entries = JULY_WEEK3_KNOWN_DATA.map(person => {
+      let staff = matchStaffByName(person.name);
+      if(!staff){
+        staff = { id: uid('st'), name: person.name, role: person.role, status:'active', standardHours: ROLE_DEFAULTS[person.role].standardHours, rate: ROLE_DEFAULTS[person.role].rate, note:'' };
+        roster.push(staff);
+      }
+      const shifts = person.shifts.map(raw => parseShiftCell(raw));
+      return { staffId: staff.id, shifts };
+    });
+    if(isCurrent){
+      applyWeekImportCore(entries);
+    } else {
+      // Patch the archived week directly (same effect as applyWeekImportCore, without
+      // touching whichever week is currently on screen).
+      const importedIds = new Set(entries.map(e=>e.staffId));
+      wk.scheduleRows = (wk.scheduleRows||[]).filter(r => importedIds.has(r.staffId));
+      entries.forEach(({staffId, shifts}) => {
+        let row = wk.scheduleRows.find(r=>r.staffId===staffId);
+        if(!row){ row = { id: uid('row'), staffId, shifts: [] }; wk.scheduleRows.push(row); }
+        row.shifts = shifts.map(cell => {
+          const s = blankShift();
+          s.type = cell.code;
+          if(cell.code==='MID') s.midStart = 600;
+          if(cell.code==='CUSTOM'){ s.csHH=cell.csHH||'09'; s.csMM=cell.csMM||'00'; s.ceHH=cell.ceHH||'17'; s.ceMM=cell.ceMM||'30'; }
+          return s;
+        });
+      });
+      wk.rosterSnapshot = JSON.parse(JSON.stringify(roster));
+    }
+    saveCurrentStoreData();
+    return true;
+  }
+  function isWeekBroken(rows){
+    return (rows || []).some(row => row.staffId && !roster.some(s => s.id === row.staffId));
+  }
+  // General version of the July-Week-3 fix above: scans EVERY week found in an uploaded
+  // file, and for each one that matches a week you already have saved AND is currently
+  // broken (orphaned staff link with no recoverable name), rebuilds that week from the
+  // file's real data -- across as many weeks as the file contains, not just one.
+  // Groups every week block found in a file by outlet (sheet name) and shows a foldable
+  // picker, so the manager can bring in just the STAFF LIST for one outlet before any
+  // schedule data is imported -- front-loading the roster to avoid ad-hoc "add as new"
+  // guessing later during actual week imports.
+  function startRosterImportFromBlocks(blocks){
+    const blocksBySheet = {};
+    blocks.forEach(b => {
+      const key = b.sheetName || '(unnamed sheet)';
+      if(!blocksBySheet[key]) blocksBySheet[key] = b; // only the first (latest) block per outlet -- avoids pulling in old/stale names
+    });
+    rosterImportOutlets = { blocksBySheet };
+    render();
+  }
+  function buildRosterImportPreview(sheetName){
+    const blocksBySheet = rosterImportOutlets.blocksBySheet;
+    const block = blocksBySheet[sheetName];
+    const staffList = block.rows.map(r => {
+      const existing = matchStaffByName(r.rawName);
+      return { rawName: r.rawName, role: r.detectedRole || (existing ? existing.role : 'PT'), roleDetected: !!r.detectedRole, existing };
+    });
+    rosterImportPreview = { sheetName, staffList, blocksBySheet };
+    rosterImportOutlets = null;
+    render();
+  }
+  function applyRosterImport(){
+    const { staffList } = rosterImportPreview;
+    let added = 0;
+    staffList.forEach((s, idx) => {
+      if(s.existing) return; // already there, skip -- never duplicate
+      const sel = root.querySelector(`.roster-import-role[data-idx="${idx}"]`);
+      const role = sel ? sel.value : s.role;
+      roster.push({ id: uid('st'), name: s.rawName, role, status:'active', standardHours: ROLE_DEFAULTS[role].standardHours, rate: ROLE_DEFAULTS[role].rate, note: '' });
+      added++;
+    });
+    persistCurrent();
+    rosterImportPreview = null;
+    render();
+    alert(added ? `Added ${added} new staff member(s) to your roster.` : 'Everyone found was already in your roster \u2014 nothing new to add.');
+  }
+  function repairBrokenWeeksFromBlocks(blocks){
+    let weeksFixed = 0, staffFixed = 0, weeksSkippedNoTarget = 0;
+    // If the file has multiple distinctly-named sheets, only use the one(s) matching the
+    // outlet currently open -- otherwise a multi-outlet workbook could pull another
+    // outlet's schedule in to "fix" this one, which would be wrong.
+    const distinctSheets = [...new Set(blocks.map(b => b.sheetName))];
+    let usableBlocks = blocks;
+    if(distinctSheets.length > 1){
+      const target = normName(selectedOutlet);
+      const matchingSheets = distinctSheets.filter(sn => {
+        const n = normName(sn);
+        return n === target || n.includes(target) || target.includes(n);
+      });
+      if(!matchingSheets.length){
+        alert(`This file has multiple outlets (${distinctSheets.join(', ')}), and none of the sheet names clearly match "${selectedOutlet}" (the outlet you currently have open). To avoid pulling in the wrong outlet's data, nothing was changed -- open the correct outlet first, or use a file with just that outlet's sheet.`);
+        return { weeksFixed: 0, staffFixed: 0, weeksSkippedNoTarget: 0 };
+      }
+      usableBlocks = blocks.filter(b => matchingSheets.includes(b.sheetName));
+    }
+    usableBlocks.forEach(b => {
+      const target = parseTitleToMonthWeek(b.titleLabel);
+      if(!target){ weeksSkippedNoTarget++; return; } // file doesn't clearly say which week this is
+      const key = weekKey(target.month, target.week);
+      const isCurrent = (cal.month === target.month && cal.week === target.week);
+      const wk = weekArchive[key];
+      const rowsToCheck = isCurrent ? scheduleRows : (wk ? wk.scheduleRows : null);
+      if(!rowsToCheck || !isWeekBroken(rowsToCheck)) return; // don't exist locally, or already fine -- leave untouched
+      const entries = b.rows.map(pr => {
+        let staff = matchStaffByName(pr.rawName);
+        if(!staff){
+          const role = pr.detectedRole || 'PT';
+          staff = { id: uid('st'), name: pr.rawName, role, status:'active', standardHours: ROLE_DEFAULTS[role].standardHours, rate: ROLE_DEFAULTS[role].rate, note: '' };
+          roster.push(staff);
+        }
+        return { staffId: staff.id, shifts: pr.shifts };
+      });
+      if(isCurrent){
+        applyWeekImportCore(entries);
+      } else {
+        const importedIds = new Set(entries.map(e=>e.staffId));
+        wk.scheduleRows = (wk.scheduleRows || []).filter(r => importedIds.has(r.staffId));
+        entries.forEach(({staffId, shifts}) => {
+          let row = wk.scheduleRows.find(r=>r.staffId===staffId);
+          if(!row){ row = { id: uid('row'), staffId, shifts: [] }; wk.scheduleRows.push(row); }
+          row.shifts = shifts.map(cell => {
+            const s = blankShift();
+            s.type = cell.code;
+            if(cell.code==='MID') s.midStart = 600;
+            if(cell.code==='CUSTOM'){ s.csHH=cell.csHH||'09'; s.csMM=cell.csMM||'00'; s.ceHH=cell.ceHH||'17'; s.ceMM=cell.ceMM||'30'; }
+            return s;
+          });
+        });
+        wk.rosterSnapshot = JSON.parse(JSON.stringify(roster));
+      }
+      weeksFixed++;
+      staffFixed += entries.length;
+    });
+    if(weeksFixed > 0) saveCurrentStoreData();
+    return { weeksFixed, staffFixed, weeksSkippedNoTarget };
+  }
+  function applyWeekImportCore(entries){
     // entries: [{ staffId, shifts:[7 parsed cells: {code, csHH?, csMM?, ceHH?, ceMM?}] }]
     // This file represents the FULL week's schedule, so anyone currently in this week's
     // rows (e.g. inherited from a previous week when you switched here) but NOT present
@@ -2213,10 +2624,82 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         return s;
       });
     });
-    weekImportReview = null;
     persistCurrent();
+    return { staffCount: entries.length, unrecognizedCount };
+  }
+  function applyWeekImport(entries){
+    const { staffCount, unrecognizedCount } = applyWeekImportCore(entries);
+    weekImportReview = null;
     render();
-    alert('Week schedule imported for ' + entries.length + ' staff member(s) \u2014 this replaces the whole week, so anyone not in the file is no longer scheduled this week (they\'re still in your roster).' + (unrecognizedCount ? ' ' + unrecognizedCount + ' cell(s) had text this tool didn\'t recognize and were set to OFF \u2014 worth a quick check.' : ''));
+    alert('Week schedule imported for ' + staffCount + ' staff member(s) \u2014 this replaces the whole week, so anyone not in the file is no longer scheduled this week (they\'re still in your roster).' + (unrecognizedCount ? ' ' + unrecognizedCount + ' cell(s) had text this tool didn\'t recognize and were set to OFF \u2014 worth a quick check.' : ''));
+  }
+  // Batch-imports several week blocks in one go. Always processes earliest week first,
+  // regardless of the order they were clicked in, so new staff correctly carry forward
+  // through time (respecting the same historical-accuracy rule as everything else).
+  // Unmatched names are auto-added as new staff using whatever role the file indicates.
+  // Resolves matches for every selected week up front (without applying anything yet) and
+  // shows them in a review screen -- nothing is written until the user confirms.
+  function buildBatchImportPreview(selectedBlocks){
+    const sorted = selectedBlocks.slice().sort((a,b) => (a.target.month*10+a.target.week) - (b.target.month*10+b.target.week));
+    const weeks = sorted.map(b => ({
+      target: b.target,
+      titleLabel: b.titleLabel,
+      dateLabel: b.dateLabel,
+      weekLabel: b.weekLabel,
+      rows: b.rows,
+      resolutions: b.rows.map(pr => {
+        const staff = matchStaffByName(pr.rawName);
+        return staff ? staff.id : 'SKIP';
+      })
+    }));
+    weekBlockChoice = null;
+    batchImportPreview = { weeks };
+    render();
+  }
+  // Reads whatever the Step 1 dropdowns currently show and moves to the Step 2 grid preview.
+  function applyBatchImportFromPreview(){
+    const { weeks } = batchImportPreview;
+    // Sync whatever the dropdowns currently show before applying anything
+    weeks.forEach((w, wi) => {
+      w.rows.forEach((pr, ri) => {
+        const sel = root.querySelector(`.batch-week-resolve[data-week="${wi}"][data-row="${ri}"]`);
+        if(sel) w.resolutions[ri] = sel.value;
+        if(w.resolutions[ri] === 'NEW' && !pr.detectedRole){
+          const roleSel = root.querySelector(`.batch-week-role[data-week="${wi}"][data-row="${ri}"]`);
+          pr.chosenRole = roleSel ? roleSel.value : 'PT';
+        }
+      });
+    });
+    let totalStaff = 0, totalNew = 0, totalUnrecognized = 0;
+    const createdByName = {}; // normName(rawName) -> real staffId, for people created earlier in this same batch
+    weeks.forEach(w => {
+      switchWeek(w.target.month, w.target.week);
+      const entries = [];
+      w.rows.forEach((pr, ri) => {
+        const val = w.resolutions[ri];
+        if(val === 'SKIP') return;
+        if(val === 'NEW'){
+          const key = normName(pr.rawName);
+          if(createdByName[key]){ entries.push({ staffId: createdByName[key], shifts: pr.shifts }); return; }
+          const alreadyThere = matchStaffByName(pr.rawName);
+          if(alreadyThere){ createdByName[key] = alreadyThere.id; entries.push({ staffId: alreadyThere.id, shifts: pr.shifts }); return; }
+          const role = pr.detectedRole || pr.chosenRole || 'PT';
+          const newStaff = { id: uid('st'), name: pr.rawName, role, status:'active', standardHours: ROLE_DEFAULTS[role].standardHours, rate: ROLE_DEFAULTS[role].rate, note: '' };
+          roster.push(newStaff);
+          createdByName[key] = newStaff.id;
+          totalNew++;
+          entries.push({ staffId: newStaff.id, shifts: pr.shifts });
+        } else {
+          entries.push({ staffId: val, shifts: pr.shifts });
+        }
+      });
+      const { staffCount, unrecognizedCount } = applyWeekImportCore(entries);
+      totalStaff += staffCount;
+      totalUnrecognized += unrecognizedCount;
+    });
+    batchImportPreview = null;
+    render();
+    alert(`Imported ${weeks.length} week(s) \u2014 ${totalStaff} staff schedule row(s) total, ${totalNew} added as new staff.` + (totalUnrecognized ? ` ${totalUnrecognized} cell(s) had text this tool didn't recognize and were set to OFF \u2014 worth checking.` : ''));
   }
   function to12hLabel(HH, MM){
     let h = parseInt(HH, 10);
@@ -2312,7 +2795,6 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       for(let c=2;c<=lastCol;c++){ const cell=row.getCell(c); cell.fill=fill(COLORS.steelBlue); cell.border=thinBorder; cell.alignment=centered; cell.font = font({ color:{argb:COLORS.white}, bold: c===2 }); }
       r++;
     }
-    r++;
 
     SECTION_ORDER.forEach(sec => {
       const rowsForRole = scheduleRowsForWeek.filter(rr => { const st = staffById[rr.staffId]; return st && st.role === sec.role && st.status === 'active'; });
@@ -2612,12 +3094,81 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
           render();
         }
       });
+      const repairFromFileBtn = document.getElementById('zs-repair-from-file-btn');
+      const repairFromFileInput = document.getElementById('zs-repair-from-file-input');
+      if(repairFromFileBtn && repairFromFileInput) repairFromFileBtn.addEventListener('click', ()=>{ repairFromFileInput.click(); });
+      if(repairFromFileInput) repairFromFileInput.addEventListener('change', e=>{
+        const file = e.target.files[0];
+        if(!file) return;
+        readFileAsSheets(file, sheets => {
+          const blocks = extractAllWeekBlocks(sheets);
+          if(!blocks.length){ alert('Could not find any weeks in that file.'); return; }
+          const { weeksFixed, staffFixed, weeksSkippedNoTarget } = repairBrokenWeeksFromBlocks(blocks);
+          render();
+          alert(weeksFixed
+            ? `Repaired ${weeksFixed} broken week(s), reconnecting ${staffFixed} staff schedule row(s) total.` + (weeksSkippedNoTarget ? ` (${weeksSkippedNoTarget} week(s) in the file didn't have a clear "MONTH YEAR (WEEK N)" label, so they were skipped for safety.)` : '')
+            : 'Scanned the file, but found nothing broken to repair \u2014 every week already matches correctly.');
+        });
+        repairFromFileInput.value = '';
+      });
+      const importStaffBtn = document.getElementById('zs-import-staff-btn');
+      const importStaffInput = document.getElementById('zs-import-staff-input');
+      if(importStaffBtn && importStaffInput) importStaffBtn.addEventListener('click', ()=>{ importStaffInput.click(); });
+      if(importStaffInput) importStaffInput.addEventListener('change', e=>{
+        const file = e.target.files[0];
+        if(!file) return;
+        readFileAsSheets(file, sheets => {
+          const blocks = extractAllWeekBlocks(sheets);
+          if(!blocks.length){ alert('Could not find any staff/week data in that file.'); return; }
+          startRosterImportFromBlocks(blocks);
+        });
+        importStaffInput.value = '';
+      });
+      root.querySelectorAll('[data-toggle-roster-sheet]').forEach(header=>{
+        header.addEventListener('click', ()=>{
+          const sheetName = header.dataset.toggleRosterSheet;
+          openRosterSheets[sheetName] = !openRosterSheets[sheetName];
+          const group = root.querySelector(`.zs-month-group[data-roster-sheet="${CSS.escape(sheetName)}"]`);
+          if(group){
+            group.classList.toggle('open', !!openRosterSheets[sheetName]);
+            const chevron = group.querySelector('.zs-month-chevron');
+            if(chevron) chevron.style.transform = openRosterSheets[sheetName] ? 'rotate(90deg)' : '';
+          }
+        });
+      });
+      root.querySelectorAll('[data-choose-roster-outlet]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{ buildRosterImportPreview(btn.dataset.chooseRosterOutlet); });
+      });
+      const rosterImportCancelOutletsBtn = document.getElementById('zs-roster-import-cancel-outlets');
+      if(rosterImportCancelOutletsBtn) rosterImportCancelOutletsBtn.addEventListener('click', ()=>{ rosterImportOutlets = null; render(); });
+      const rosterImportApplyBtn = document.getElementById('zs-roster-import-apply');
+      if(rosterImportApplyBtn) rosterImportApplyBtn.addEventListener('click', ()=>{ applyRosterImport(); });
+      const rosterImportBackBtn = document.getElementById('zs-roster-import-back');
+      if(rosterImportBackBtn) rosterImportBackBtn.addEventListener('click', ()=>{
+        rosterImportOutlets = { blocksBySheet: rosterImportPreview.blocksBySheet };
+        rosterImportPreview = null;
+        render();
+      });
+      const rosterImportCancelBtn = document.getElementById('zs-roster-import-cancel');
+      if(rosterImportCancelBtn) rosterImportCancelBtn.addEventListener('click', ()=>{ rosterImportPreview = null; render(); });
       root.querySelectorAll('[data-remove-staff]').forEach(btn=>{
         btn.addEventListener('click', e=>{
           const id = e.target.dataset.removeStaff;
-          roster = roster.filter(s=>s.id!==id);
-          scheduleRows.forEach(r=>{ if(r.staffId===id) r.staffId=null; });
-          delete otHours[id];
+          const staff = roster.find(s=>s.id===id);
+          const hasHistory = Object.values(weekArchive).some(wk => (wk.scheduleRows||[]).some(r => r.staffId === id));
+          if(hasHistory){
+            // Deleting outright would orphan every past week that references this person.
+            // Mark them Inactive instead -- history stays intact, they drop out of the
+            // schedule picker for new weeks, same practical effect without breaking anything.
+            if(staff) staff.status = 'inactive';
+            scheduleRows = scheduleRows.filter(r=>r.staffId!==id);
+            persistCurrent();
+            alert(`${staff ? staff.name : 'This staff member'} has schedule history saved in past weeks, so they were set to Inactive instead of deleted -- this keeps old weeks intact. They're removed from the current week and won't appear in the schedule picker going forward.`);
+          } else {
+            roster = roster.filter(s=>s.id!==id);
+            scheduleRows.forEach(r=>{ if(r.staffId===id) r.staffId=null; });
+            delete otHours[id];
+          }
           render();
         });
       });
@@ -2643,6 +3194,22 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         sel.addEventListener('change', e=>{
           const row = scheduleRows.find(r=>r.id===e.target.dataset.row);
           row.shifts[parseInt(e.target.dataset.day)].midStart = parseInt(e.target.value);
+          persistCurrent();
+          render();
+        });
+      });
+      root.querySelectorAll('.m-start').forEach(sel=>{
+        sel.addEventListener('change', e=>{
+          const row = scheduleRows.find(r=>r.id===e.target.dataset.row);
+          row.shifts[parseInt(e.target.dataset.day)].mStart = parseInt(e.target.value);
+          persistCurrent();
+          render();
+        });
+      });
+      root.querySelectorAll('.c-start').forEach(sel=>{
+        sel.addEventListener('change', e=>{
+          const row = scheduleRows.find(r=>r.id===e.target.dataset.row);
+          row.shifts[parseInt(e.target.dataset.day)].cStart = parseInt(e.target.value);
           persistCurrent();
           render();
         });
@@ -2730,6 +3297,44 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       });
       const weekBlockCancelBtn = document.getElementById('zs-week-block-cancel');
       if(weekBlockCancelBtn) weekBlockCancelBtn.addEventListener('click', ()=>{ weekBlockChoice = null; render(); });
+      const weekBlockImportSelectedBtn = document.getElementById('zs-week-block-import-selected');
+      if(weekBlockImportSelectedBtn) weekBlockImportSelectedBtn.addEventListener('click', ()=>{
+        const checked = Array.from(root.querySelectorAll('.week-block-select:checked'));
+        if(!checked.length){ alert('Check the box next to at least one week first.'); return; }
+        const selectedBlocks = checked.map(cb => {
+          const idx = parseInt(cb.dataset.idx, 10);
+          const b = weekBlockChoice.blocks[idx];
+          return { ...b, target: parseTitleToMonthWeek(b.titleLabel) };
+        });
+        buildBatchImportPreview(selectedBlocks);
+      });
+      const batchImportCancelBtn = document.getElementById('zs-batch-import-cancel');
+      if(batchImportCancelBtn) batchImportCancelBtn.addEventListener('click', ()=>{ batchImportPreview = null; render(); });
+      const batchAddAllNewBtn = document.getElementById('zs-batch-add-all-new');
+      if(batchAddAllNewBtn) batchAddAllNewBtn.addEventListener('click', ()=>{
+        batchImportPreview.weeks.forEach(w => {
+          w.resolutions = w.resolutions.map(r => r === 'SKIP' ? 'NEW' : r);
+        });
+        render();
+      });
+      if(batchImportPreview){
+        root.querySelectorAll('.batch-week-resolve').forEach(sel=>{
+          sel.addEventListener('change', ()=>{
+            const wi = parseInt(sel.dataset.week, 10), ri = parseInt(sel.dataset.row, 10);
+            batchImportPreview.weeks[wi].resolutions[ri] = sel.value;
+            render();
+          });
+        });
+        root.querySelectorAll('.batch-week-role').forEach(sel=>{
+          sel.addEventListener('change', ()=>{
+            const wi = parseInt(sel.dataset.week, 10), ri = parseInt(sel.dataset.row, 10);
+            batchImportPreview.weeks[wi].rows[ri].chosenRole = sel.value;
+            render();
+          });
+        });
+      }
+      const batchImportApplyBtn = document.getElementById('zs-batch-import-apply');
+      if(batchImportApplyBtn) batchImportApplyBtn.addEventListener('click', ()=>{ applyBatchImportFromPreview(); });
       const weekImportAddAllNewBtn = document.getElementById('zs-week-import-add-all-new');
       if(weekImportAddAllNewBtn) weekImportAddAllNewBtn.addEventListener('click', ()=>{
         weekImportReview.resolutions = weekImportReview.resolutions.map(r => r === 'SKIP' ? 'NEW' : r);
