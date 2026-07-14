@@ -1940,12 +1940,10 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       <div class="zs-actions-row">
         <button class="zs-mini-btn" id="zs-add-row">+ Add Row</button>
         <button class="zs-mini-btn ghost" id="zs-reset-btn">Reset Current Week</button>
-        <button class="zs-mini-btn ghost" id="zs-export-week-btn">Export Week (Excel)</button>
-        <button class="zs-mini-btn ghost" id="zs-export-all-weeks-btn">Export All Saved Weeks (Stacked)</button>
-        <button class="zs-mini-btn ghost" id="zs-import-week-btn">Import Week (Excel)</button>
-        <button class="zs-mini-btn" id="zs-export-week-csv-btn" style="background:var(--green);">Export Week (CSV)</button>
-        <button class="zs-mini-btn" id="zs-import-week-csv-btn" style="background:var(--green);">Import Week (CSV)</button>
-        <input type="file" id="zs-import-week-csv-input" accept=".csv,text/csv" style="display:none"/>
+        <button class="zs-mini-btn" id="zs-export-week-btn" style="background:var(--green);">Export Week (Excel)</button>
+        <button class="zs-mini-btn ghost" id="zs-export-month-btn">Export Saved Month</button>
+        <button class="zs-mini-btn ghost" id="zs-export-all-weeks-btn">Export All Saved Yearly (Stacked)</button>
+        <button class="zs-mini-btn" id="zs-import-week-btn" style="background:var(--green);">Import Week (Excel)</button>
         <input type="file" id="zs-import-week-input" accept=".csv,.xlsx,.xls,text/csv" style="display:none"/>
       </div>
     `;
@@ -2412,34 +2410,27 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     downloadWorkbook(wb, filename);
   }
   // Plain CSV export (no styling library, no colors) — smaller file, useful for quick testing.
-  function exportWeekFileCsv(){
-    const columns = getColumns();
-    const staffById = {};
-    roster.forEach(s => { staffById[s.id] = s; });
-    const filename = `zus_week_${weekKey(cal.month,cal.week)}_${new Date().toISOString().slice(0,10)}`;
-    exportWeekFileCsvFallback(columns, staffById, SECTION_ORDER, filename);
-  }
   // Stacks every SAVED week (plus the one currently open) vertically in one sheet, in
   // chronological order, so you get everything "vertically visible" in a single import —
   // no manual copy/paste between tabs needed. Note: daily sales figures are only kept in
   // memory for the week you currently have open, so SALES ACHIEVED will be blank for
   // other weeks in this combined export.
-  function exportAllWeeksFile(){
-    if(!window.ExcelJS){ alert('This export needs the Excel styling library, which isn\'t available right now (check your internet connection) — try again once you\'re online.'); return; }
-    persistCurrent(); // make sure the currently open week is included and up to date
-    const ascending = Object.keys(weekArchive).sort((a,b)=>{
+  // Orders a set of week keys as: current week first, then step backward (older) to the
+  // earliest, then wrap to the newest and continue backward down to just after current.
+  // Shared by both the Month and Yearly exports so they behave identically, just scoped
+  // to a different pool of weeks.
+  function orderWeeksAroundCurrent(weekKeys){
+    const ascending = weekKeys.slice().sort((a,b)=>{
       const [am,aw] = a.split('-').map(Number), [bm,bw] = b.split('-').map(Number);
       return (am*10+aw) - (bm*10+bw);
     });
-    if(!ascending.length){ alert('No saved weeks found to export yet.'); return; }
     const currentKey = weekKey(cal.month, cal.week);
     const idx = ascending.indexOf(currentKey);
-    // Current week first, then step backward (older) to the earliest week, then wrap to
-    // the newest week and continue backward down to just after the current week.
-    const keys = idx === -1
-      ? ascending.slice().reverse() // current week not saved yet (shouldn't happen after persistCurrent, but just in case) — fall back to plain newest-to-oldest
+    return idx === -1
+      ? ascending.slice().reverse()
       : [ascending[idx], ...ascending.slice(0, idx).reverse(), ...ascending.slice(idx+1).reverse()];
-    const { wb, ws } = newStyledWorkbook('All Weeks');
+  }
+  function writeOrderedWeeks(ws, keys){
     let r = 3;
     keys.forEach(key => {
       const [m, w] = key.split('-').map(Number);
@@ -2448,7 +2439,30 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       r = writeWeekBlock(ws, r, m, w, wk.scheduleRows, wk.rosterSnapshot || roster, isCurrent ? dailySales : [null,null,null,null,null,null,null], isCurrent ? customDayNotes : wk.customDayNotes);
       r++; // extra spacer row between week blocks
     });
+  }
+  function exportAllWeeksFile(){
+    if(!window.ExcelJS){ alert('This export needs the Excel styling library, which isn\'t available right now (check your internet connection) — try again once you\'re online.'); return; }
+    persistCurrent(); // make sure the currently open week is included and up to date
+    const keys = orderWeeksAroundCurrent(Object.keys(weekArchive));
+    if(!keys.length){ alert('No saved weeks found to export yet.'); return; }
+    const { wb, ws } = newStyledWorkbook('All Weeks');
+    writeOrderedWeeks(ws, keys);
     downloadWorkbook(wb, `zus_all_weeks_${new Date().toISOString().slice(0,10)}`);
+  }
+  // Exports only the saved weeks belonging to the SAME MONTH as whichever week is
+  // currently open (e.g. all July weeks if July is open) -- not the whole year.
+  function exportSavedMonthFile(){
+    if(!window.ExcelJS){ alert('This export needs the Excel styling library, which isn\'t available right now (check your internet connection) — try again once you\'re online.'); return; }
+    persistCurrent();
+    const monthKeys = Object.keys(weekArchive).filter(key => {
+      const [m] = key.split('-').map(Number);
+      return m === cal.month;
+    });
+    if(!monthKeys.length){ alert('No saved weeks found for ' + MONTH_NAMES[cal.month-1] + ' yet.'); return; }
+    const keys = orderWeeksAroundCurrent(monthKeys);
+    const { wb, ws } = newStyledWorkbook(MONTH_NAMES[cal.month-1]);
+    writeOrderedWeeks(ws, keys);
+    downloadWorkbook(wb, `zus_${MONTH_NAMES[cal.month-1].toLowerCase()}_${YEAR}_${new Date().toISOString().slice(0,10)}`);
   }
   // Plain-text fallback (no colors/borders) if ExcelJS fails to load — same content, just flat.
   function exportWeekFileCsvFallback(columns, staffById, SECTION_ORDER, filename){
@@ -2672,10 +2686,10 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       });
       const exportWeekBtn = document.getElementById('zs-export-week-btn');
       if(exportWeekBtn) exportWeekBtn.addEventListener('click', ()=>{ exportWeekFile(); });
+      const exportMonthBtn = document.getElementById('zs-export-month-btn');
+      if(exportMonthBtn) exportMonthBtn.addEventListener('click', ()=>{ exportSavedMonthFile(); });
       const exportAllWeeksBtn = document.getElementById('zs-export-all-weeks-btn');
       if(exportAllWeeksBtn) exportAllWeeksBtn.addEventListener('click', ()=>{ exportAllWeeksFile(); });
-      const exportWeekCsvBtn = document.getElementById('zs-export-week-csv-btn');
-      if(exportWeekCsvBtn) exportWeekCsvBtn.addEventListener('click', ()=>{ exportWeekFileCsv(); });
       function handleWeekImportFile(file, inputEl){
         if(!file) return;
         readFileAsSheets(file, sheets => {
@@ -2694,10 +2708,6 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       const importWeekInput = document.getElementById('zs-import-week-input');
       if(importWeekBtn && importWeekInput) importWeekBtn.addEventListener('click', ()=>{ importWeekInput.click(); });
       if(importWeekInput) importWeekInput.addEventListener('change', e=>{ handleWeekImportFile(e.target.files[0], importWeekInput); });
-      const importWeekCsvBtn = document.getElementById('zs-import-week-csv-btn');
-      const importWeekCsvInput = document.getElementById('zs-import-week-csv-input');
-      if(importWeekCsvBtn && importWeekCsvInput) importWeekCsvBtn.addEventListener('click', ()=>{ importWeekCsvInput.click(); });
-      if(importWeekCsvInput) importWeekCsvInput.addEventListener('change', e=>{ handleWeekImportFile(e.target.files[0], importWeekCsvInput); });
       root.querySelectorAll('[data-choose-block]').forEach(btn=>{
         btn.addEventListener('click', ()=>{
           const idx = parseInt(btn.dataset.chooseBlock, 10);
