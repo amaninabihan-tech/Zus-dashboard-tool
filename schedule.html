@@ -596,13 +596,11 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
 
   // Recurring operational routine notes, computed purely from the real date -- applies
   // identically across every state and every store.
-  //   Monday    : Calibration, Stocks Ordering, Weekly Stocks Take
+  //   Monday    : Calibration, Weekly Stocks Take
   //               EXCEPT: no Weekly Stocks Take if EOM falls Mon/Tue/Wed/Thu of THIS week
   //               (the EOM count already covers it), or if EOM fell Fri/Sat/Sun of the
   //               PREVIOUS week (too close together -- the week after that resumes normally).
   //   Thursday  : Calibration
-  //   Friday    : Stocks Receiving
-  //   Saturday  : Check Stocks for Ordering
   //   Any day   : EOM Stocks Take, if that date is the real last calendar day of its month (28/29/30/31)
   function isEOMDate(d){
     const m = d.getMonth()+1;
@@ -626,15 +624,10 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     if(isEOM) notes.push('EOM Stock Take');
     if(weekdayIdx === 1){ // Monday
       notes.push('Calibration');
-      notes.push('Stocks Ordering');
       const mondayDate = new Date(YEAR, month-1, dateNum);
       if(!shouldSkipWeeklyStockTake(mondayDate)){ notes.push('Weekly Stock Take'); }
     } else if(weekdayIdx === 4){ // Thursday
       notes.push('Calibration');
-    } else if(weekdayIdx === 5){ // Friday
-      notes.push('Stocks Receiving');
-    } else if(weekdayIdx === 6){ // Saturday
-      notes.push('Check Stocks for Ordering');
     }
     return notes;
   }
