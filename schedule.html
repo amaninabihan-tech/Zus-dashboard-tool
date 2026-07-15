@@ -1289,8 +1289,7 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
   let openMonths = {};
   let openImportSheets = {};
   let openRosterSheets = {};
-  let rosterImportOutlets = null; // when set, shows the foldable outlet picker for importing staff only
-  let rosterImportPreview = null; // when set, shows the review screen for staff about to be added
+  let rosterImportOutlets = null; // when set, shows the foldable outlet picker with inline role editing for importing staff only
 
   function renderHistory(){
     const currentKey = weekKey(cal.month, cal.week);
@@ -1522,8 +1521,6 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       html += renderWeekBlockChoice();
     } else if(rosterImportOutlets){
       html += renderRosterImportOutlets();
-    } else if(rosterImportPreview){
-      html += renderRosterImportPreview();
     } else if(batchImportPreview){
       html += renderBatchImportPreview();
     } else if(weekImportReview){
@@ -1602,11 +1599,15 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     const sheetNames = Object.keys(blocksBySheet);
     let html = `
       <div class="zs-section-title">Import Staff \u2014 Choose Outlet</div>
-      <p class="zs-note" style="margin-top:-6px;">This file has ${sheetNames.length} outlet(s) \u2014 tap one to expand it, then pick the outlet whose staff you want to add. Only the latest week block for each outlet is used, so you won't see old or unwanted names. This only imports names and roles \u2014 no schedule data yet.</p>
+      <p class="zs-note" style="margin-top:-6px;">This file has ${sheetNames.length} outlet(s) \u2014 tap one to expand it, review and adjust roles right there, then add them to your roster. Only the latest week block for each outlet is used, so you won't see old or unwanted names. This only imports names and roles \u2014 no schedule data yet.</p>
     `;
     sheetNames.forEach(sheetName => {
       const block = blocksBySheet[sheetName];
       const isOpen = !!openRosterSheets[sheetName];
+      const staffList = block.rows.map(r => {
+        const existing = matchStaffByName(r.rawName);
+        return { rawName: r.rawName, role: r.detectedRole || (existing ? existing.role : 'PT'), roleDetected: !!r.detectedRole, existing };
+      });
       html += `<div class="zs-month-group ${isOpen?'open':''}" data-roster-sheet="${sheetName}">
         <div class="zs-month-header" data-toggle-roster-sheet="${sheetName}">
           <div class="zs-month-header-left">
@@ -1616,48 +1617,32 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
           </div>
         </div>
         <div class="zs-month-body">
-          <p class="zs-note" style="margin:0 0 10px;">${block.rows.map(r=>r.rawName).join(', ')}</p>
-          <button class="zs-mini-btn" data-choose-roster-outlet="${sheetName}" style="background:var(--green);">Use this outlet</button>
+          <table class="zs-roster" style="min-width:0; margin-bottom:12px;">
+            <thead><tr><th>Name</th><th>Role</th><th>Status</th></tr></thead>
+            <tbody>
+              ${staffList.map((s, idx) => `
+                <tr>
+                  <td class="name-cell">${s.rawName}</td>
+                  <td>${s.existing
+                    ? `${roleLabel(s.existing.role)} <span class="zs-note">(existing)</span>`
+                    : `<select class="roster-import-inline-role" data-sheet="${sheetName}" data-idx="${idx}">
+                        <option value="OS" ${s.role==='OS'?'selected':''}>Outlet Supervisor</option>
+                        <option value="FT" ${s.role==='FT'?'selected':''}>Full Timer</option>
+                        <option value="CS" ${s.role==='CS'?'selected':''}>Cover Staff</option>
+                        <option value="PT" ${s.role==='PT'?'selected':''}>Part Timer</option>
+                      </select>${!s.roleDetected ? `<div class="zs-note" style="font-size:10px; color:var(--amber);">Role not detected \u2014 please confirm</div>` : ''}`
+                  }</td>
+                  <td>${s.existing ? `<span style="color:var(--navy);">Already in roster \u2014 skipped</span>` : `<span style="color:var(--amber); font-weight:600;">Will be added</span>`}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <button class="zs-mini-btn" data-apply-roster-outlet="${sheetName}" style="background:var(--green);">Add Staff To Roster</button>
         </div>
       </div>`;
     });
     html += `<div class="zs-actions-row" style="margin-top:14px;">
       <button class="zs-mini-btn ghost" id="zs-roster-import-cancel-outlets">Cancel</button>
-    </div>`;
-    return html;
-  }
-  function renderRosterImportPreview(){
-    const { sheetName, staffList } = rosterImportPreview;
-    let html = `
-      <div class="zs-section-title">Import Staff \u2014 ${sheetName}</div>
-      <p class="zs-note" style="margin-top:-6px;">Found ${staffList.length} unique staff member(s). Review roles below, then confirm to add them to your roster. Names already in your roster are shown but won't be duplicated.</p>
-      <div class="zs-table-wrap" style="padding:0;">
-      <table class="zs-roster" style="min-width:0;">
-        <thead><tr><th>Name</th><th>Role</th><th>Status</th></tr></thead>
-        <tbody>
-          ${staffList.map((s, idx) => `
-            <tr>
-              <td class="name-cell">${s.rawName}</td>
-              <td>${s.existing
-                ? `${roleLabel(s.existing.role)} <span class="zs-note">(existing)</span>`
-                : `<select class="roster-import-role" data-idx="${idx}">
-                    <option value="OS" ${s.role==='OS'?'selected':''}>Outlet Supervisor</option>
-                    <option value="FT" ${s.role==='FT'?'selected':''}>Full Timer</option>
-                    <option value="CS" ${s.role==='CS'?'selected':''}>Cover Staff</option>
-                    <option value="PT" ${s.role==='PT'?'selected':''}>Part Timer</option>
-                  </select>${!s.roleDetected ? `<div class="zs-note" style="font-size:10px; color:var(--amber);">Role not detected \u2014 please confirm</div>` : ''}`
-              }</td>
-              <td>${s.existing ? `<span style="color:var(--navy);">Already in roster \u2014 skipped</span>` : `<span style="color:var(--amber); font-weight:600;">Will be added</span>`}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      </div>
-    `;
-    html += `<div class="zs-actions-row" style="margin-top:14px;">
-      <button class="zs-mini-btn" id="zs-roster-import-apply" style="background:var(--green);">Add Staff To Roster</button>
-      <button class="zs-mini-btn ghost" id="zs-roster-import-back">Back</button>
-      <button class="zs-mini-btn ghost" id="zs-roster-import-cancel">Cancel</button>
     </div>`;
     return html;
   }
@@ -2506,29 +2491,19 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     rosterImportOutlets = { blocksBySheet };
     render();
   }
-  function buildRosterImportPreview(sheetName){
-    const blocksBySheet = rosterImportOutlets.blocksBySheet;
-    const block = blocksBySheet[sheetName];
-    const staffList = block.rows.map(r => {
-      const existing = matchStaffByName(r.rawName);
-      return { rawName: r.rawName, role: r.detectedRole || (existing ? existing.role : 'PT'), roleDetected: !!r.detectedRole, existing };
-    });
-    rosterImportPreview = { sheetName, staffList, blocksBySheet };
-    rosterImportOutlets = null;
-    render();
-  }
-  function applyRosterImport(){
-    const { staffList } = rosterImportPreview;
+  function applyRosterImportForOutlet(sheetName){
+    const block = rosterImportOutlets.blocksBySheet[sheetName];
     let added = 0;
-    staffList.forEach((s, idx) => {
-      if(s.existing) return; // already there, skip -- never duplicate
-      const sel = root.querySelector(`.roster-import-role[data-idx="${idx}"]`);
-      const role = sel ? sel.value : s.role;
-      roster.push({ id: uid('st'), name: s.rawName, role, status:'active', standardHours: ROLE_DEFAULTS[role].standardHours, rate: ROLE_DEFAULTS[role].rate, note: '' });
+    block.rows.forEach((r, idx) => {
+      const existing = matchStaffByName(r.rawName);
+      if(existing) return; // already there, skip -- never duplicate
+      const sel = root.querySelector(`.roster-import-inline-role[data-sheet="${sheetName}"][data-idx="${idx}"]`);
+      const role = sel ? sel.value : (r.detectedRole || 'PT');
+      roster.push({ id: uid('st'), name: r.rawName, role, status:'active', standardHours: ROLE_DEFAULTS[role].standardHours, rate: ROLE_DEFAULTS[role].rate, note: '' });
       added++;
     });
     persistCurrent();
-    rosterImportPreview = null;
+    rosterImportOutlets = null;
     render();
     alert(added ? `Added ${added} new staff member(s) to your roster.` : 'Everyone found was already in your roster \u2014 nothing new to add.');
   }
@@ -3129,21 +3104,11 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
           }
         });
       });
-      root.querySelectorAll('[data-choose-roster-outlet]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{ buildRosterImportPreview(btn.dataset.chooseRosterOutlet); });
+      root.querySelectorAll('[data-apply-roster-outlet]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{ applyRosterImportForOutlet(btn.dataset.applyRosterOutlet); });
       });
       const rosterImportCancelOutletsBtn = document.getElementById('zs-roster-import-cancel-outlets');
       if(rosterImportCancelOutletsBtn) rosterImportCancelOutletsBtn.addEventListener('click', ()=>{ rosterImportOutlets = null; render(); });
-      const rosterImportApplyBtn = document.getElementById('zs-roster-import-apply');
-      if(rosterImportApplyBtn) rosterImportApplyBtn.addEventListener('click', ()=>{ applyRosterImport(); });
-      const rosterImportBackBtn = document.getElementById('zs-roster-import-back');
-      if(rosterImportBackBtn) rosterImportBackBtn.addEventListener('click', ()=>{
-        rosterImportOutlets = { blocksBySheet: rosterImportPreview.blocksBySheet };
-        rosterImportPreview = null;
-        render();
-      });
-      const rosterImportCancelBtn = document.getElementById('zs-roster-import-cancel');
-      if(rosterImportCancelBtn) rosterImportCancelBtn.addEventListener('click', ()=>{ rosterImportPreview = null; render(); });
       root.querySelectorAll('[data-remove-staff]').forEach(btn=>{
         btn.addEventListener('click', e=>{
           const id = e.target.dataset.removeStaff;
