@@ -142,6 +142,15 @@ table.zs-table td.zs-remove-col, table.zs-table th.zs-remove-col { border-left: 
 
 tfoot td { font-weight: 700; background: var(--gold-soft); border-top: 2px solid var(--navy); font-size: 11px; }
 tfoot tr.headcount td { background: #f3f0e6; font-weight: 600; font-size: 10.5px; color: var(--ink-soft); border-top: 1px solid var(--line); }
+.zs-pspd-cell { padding: 4px 3px !important; font-size: 10.5px; line-height: 1.3; }
+.zs-pspd-val { font-weight: 700; display: block; }
+.zs-pspd-status { font-size: 8.5px; font-weight: 600; letter-spacing: .02em; }
+.zs-pspd-RED { background: #FBEBEB; color: #C23B3B; }
+.zs-pspd-AMBER { background: #FFF7D6; color: #8A6D00; }
+.zs-pspd-GREEN { background: #E4F3EC; color: #2F855A; }
+.zs-pspd-ORANGE { background: #FDF0DD; color: #B7791F; }
+.zs-pspd-DARK_RED { background: #F3D9D9; color: #7A1F1F; }
+.zs-col-breach-banner { background: #FBEBEB; border: 1px solid #E3A9A9; color: #7A1F1F; border-radius: 8px; padding: 10px 14px; font-size: 12px; font-weight: 600; margin-bottom: 12px; }
 tfoot tr.role-sub td { background: white; font-weight: 600; font-size: 10.5px; color: var(--ink); text-align: left; border-top: 1px solid var(--line); }
 
 .zs-footer-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 16px; }
@@ -542,6 +551,16 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
     PT: { rate: 8.80, standardHours: 8.5, maxHours: 8.5 },
     CS: { rate: 8.15, standardHours: 8.5 },
   };
+  // Productivity (PSPD) targets, sourced directly from the outlet's own official rules:
+  //   COL(%) = (Total Labour Cost / Total Sales) x 100
+  //   Productivity (PSPD) = Total Sales / Total Labour Hours
+  const TARGET_COL_PCT = 11.0;   // the 11% variable target from sales
+  const MAX_COL_PCT = 20.0;      // the absolute 20% fixed ceiling
+  const SEVERE_LOW_PSPD = 50.0;   // below this, overstaffing is severe (red), not just moderate (amber)
+  const TARGET_PSPD = 80.0;      // the target RM80 productivity goal
+  const MAX_SAFE_PSPD = 100.0;   // the RM100 burnout threshold
+  const SUPERSTAR_PSPD = 120.0;  // the elite barista peak threshold
+  const STORE_OPEN_HOURS = 16.5; // 7:00 AM to 11:30 PM, ZUS Coffee standard business hours
   const ROLE_ORDER = { OS:0, FT:1, PT:2, CS:3, NONE:4 };
   const ROLE_GROUP_LABEL = { OS:'OUTLET SUPERVISOR', FT:'FULL TIME', PT:'PART TIME', CS:'COVER STAFF', NONE:'UNASSIGNED' };
   const MID_STARTS = [600, 660, 720]; // 10:00, 11:00, 12:00 in minutes
@@ -1194,6 +1213,64 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       else if(t==='CUSTOM') custom++; else if(t==='COVER') cov++;
     });
     return {m,mid,c,cov,custom};
+  }
+
+  // Total paid labour hours and cost for a single day, across every active staff member.
+  function dayLabourTotals(di){
+    const columns = getColumns();
+    const col = columns[di];
+    let hours = 0, cost = 0;
+    scheduleRows.forEach(r=>{
+      const staff = getStaff(r.staffId);
+      if(!staff || staff.status==='inactive') return;
+      const effStaff = getEffectiveStaffForDay(staff, col);
+      if(!effStaff) return;
+      const h = shiftHours(r.shifts[di], effStaff);
+      hours += h.paid;
+      cost += h.paid * effStaff.rate;
+    });
+    return { hours, cost };
+  }
+
+  // Productivity (PSPD) and Cost of Labour (COL%) for a single day, following the outlet's
+  // official 4-tier if/else logic and safety-lock constraints.
+  function productivityForDay(di){
+    const { hours, cost } = dayLabourTotals(di);
+    const sales = dailySales[di];
+    if(sales===null || sales===undefined || hours<=0) return null; // not enough data yet
+    const pspd = sales / hours;
+    const colPct = sales>0 ? (cost / sales) * 100 : 0;
+    let status, colorCode, alert, hoursToTrim=null, hoursToAdd=null;
+    if(pspd < SEVERE_LOW_PSPD){
+      status = 'CRITICAL: SEVERELY OVERSTAFFED'; colorCode = 'RED';
+      const optimalHours = sales / TARGET_PSPD;
+      hoursToTrim = Math.max(0, hours - optimalHours);
+      if(hours - hoursToTrim < STORE_OPEN_HOURS * 2) hoursToTrim = 0;
+      alert = hoursToTrim>0
+        ? `Productivity is severely underperforming at RM${pspd.toFixed(2)}/hr \u2014 trim ~${hoursToTrim.toFixed(1)}h to reach the RM80 target.`
+        : `Productivity is severely underperforming at RM${pspd.toFixed(2)}/hr, but the roster is already at minimum safe staffing \u2014 no further cuts recommended.`;
+    } else if(pspd < TARGET_PSPD){
+      status = 'WARNING: OVERSTAFFED'; colorCode = 'AMBER';
+      const optimalHours = sales / TARGET_PSPD;
+      hoursToTrim = Math.max(0, hours - optimalHours);
+      if(hours - hoursToTrim < STORE_OPEN_HOURS * 2) hoursToTrim = 0;
+      alert = hoursToTrim>0
+        ? `Productivity is underperforming at RM${pspd.toFixed(2)}/hr \u2014 trim ~${hoursToTrim.toFixed(1)}h to reach the RM80 target.`
+        : `Productivity is underperforming at RM${pspd.toFixed(2)}/hr, but the roster is already at minimum safe staffing \u2014 no further cuts recommended.`;
+    } else if(pspd <= MAX_SAFE_PSPD){
+      status = 'OPTIMAL: STABLE PERFORMANCE'; colorCode = 'GREEN';
+      alert = `Store is running efficiently at RM${pspd.toFixed(2)}/hr.`;
+    } else if(pspd <= SUPERSTAR_PSPD){
+      status = 'WARNING: HIGH BURNOUT RISK'; colorCode = 'ORANGE';
+      const optimalHours = sales / TARGET_PSPD;
+      hoursToAdd = Math.max(0, optimalHours - hours);
+      alert = `Extreme productivity detected at RM${pspd.toFixed(2)}/hr \u2014 add ~${hoursToAdd.toFixed(1)}h to ease workload and protect service.`;
+    } else {
+      status = 'CRITICAL: SEVERELY UNDERSTAFFED'; colorCode = 'DARK_RED';
+      alert = `System Alert: Productivity has breached the sustainable limit at RM${pspd.toFixed(2)}/hr.`;
+    }
+    const colBreach = colPct > MAX_COL_PCT;
+    return { pspd, colPct, hours, cost, sales, status, colorCode, alert, hoursToTrim, hoursToAdd, colBreach };
   }
 
   function validate(columns){
@@ -1980,7 +2057,13 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
         <span><b>COVER OUT</b> Steel Blue = this staff covers another outlet, not charged to our budget</span>
         <span><b>COVER IN</b> Deep Sea Blue = external staff covering us, charged to our budget</span>
         <span><b>OT</b> weekly overtime indicator (right edge) — 1.5&times; hourly rate, counted in budget</span>
+        <span><b>PSPD</b> Sales &divide; Labour Hours per day — Red &lt;RM50 (severely overstaffed) &middot; Amber RM50\u201380 (overstaffed) &middot; Green RM80\u2013100 (optimal) &middot; Orange RM100\u2013120 (burnout risk) &middot; Dark Red &gt;RM120 (breaking point)</span>
       </div>
+      ${(() => {
+        const breachDays = columns.map((col,di)=>col.valid?productivityForDay(di):null).filter(p=>p && p.colBreach);
+        if(!breachDays.length) return '';
+        return `<div class="zs-col-breach-banner">\u26a0\ufe0f Total Cost of Labour has breached the ${MAX_COL_PCT}% absolute fixed ceiling on ${breachDays.length} day(s) this week. Roster adjustments are locked to mandatory reductions.</div>`;
+      })()}
       <div class="zs-section-title">Weekly Schedule</div>
       <div class="zs-table-wrap">
       <table class="zs-table">
@@ -2109,6 +2192,28 @@ table.zs-readonly thead tr.zs-days th { background: #eceef2; color: var(--ink-so
       scheduleRows.forEach(r=>{ const staff=getStaff(r.staffId); const effStaff=getEffectiveStaffForDay(staff,col); dayCost += shiftHours(r.shifts[di], effStaff).paid * (effStaff?effStaff.rate:0); });
       return `<td>${fmt(dayCost)}</td>`;
     }).join('')}<td colspan="3">RM ${fmt(totalCost)}${totalOtCost()>0?` <span style="font-weight:400;font-size:9.5px;">(incl. RM ${fmt(totalOtCost())} OT)</span>`:''}</td></tr>`;
+    html += `<tr><td class="zs-name-col">Total Labour Hours</td>${columns.map((col,di)=>{
+      if(!col.valid) return `<td>—</td>`;
+      const { hours } = dayLabourTotals(di);
+      return `<td>${hours.toFixed(1)}h</td>`;
+    }).join('')}<td colspan="3"></td></tr>`;
+    html += `<tr><td class="zs-name-col">Productivity (PSPD)</td>${columns.map((col,di)=>{
+      if(!col.valid) return `<td>—</td>`;
+      const p = productivityForDay(di);
+      if(!p) return `<td class="zs-pspd-cell" style="color:var(--ink-soft);">Enter sales</td>`;
+      return `<td class="zs-pspd-cell zs-pspd-${p.colorCode}" title="${p.alert.replace(/"/g,'&quot;')}">
+        <span class="zs-pspd-val">RM${p.pspd.toFixed(2)}/hr</span>
+        <span class="zs-pspd-status">${p.status}</span>
+      </td>`;
+    }).join('')}<td colspan="3"></td></tr>`;
+    html += `<tr><td class="zs-name-col">Cost of Labour (COL%)</td>${columns.map((col,di)=>{
+      if(!col.valid) return `<td>—</td>`;
+      const p = productivityForDay(di);
+      if(!p) return `<td class="zs-pspd-cell" style="color:var(--ink-soft);">Enter sales</td>`;
+      return `<td class="zs-pspd-cell" style="${p.colBreach?'color:#C23B3B;font-weight:700;':''}">
+        ${p.colPct.toFixed(1)}%${p.colBreach?' \u26a0\ufe0f':''}
+      </td>`;
+    }).join('')}<td colspan="3"></td></tr>`;
     ['OS','FT','PT'].forEach(role=>{
       const sub = roleSubtotal(role);
       html += `<tr class="role-sub"><td colspan="${columns.length+4}">${roleLabel(role)} subtotal: ${sub.paid.toFixed(1)}h paid &middot; RM ${fmt(sub.cost)}</td></tr>`;
